@@ -2,6 +2,8 @@ const int RED = 13;
 const int YELLOW = 12;
 const int GREEN = 11;
 const int BUTTON = 2;
+const int LONG_PAUSE = 3000;
+const int SHORT_PAUSE = 1000;
 
 void setup() {
   // put your setup code here, to run once:
@@ -14,13 +16,13 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   if(digitalRead(BUTTON) == LOW){
-    delay(1000);
+    delay(SHORT_PAUSE);
     digitalWrite(GREEN, LOW);
     digitalWrite(RED, HIGH);
-    delay(3000);
+    delay(LONG_PAUSE);
     digitalWrite(YELLOW, LOW);
     digitalWrite(GREEN, HIGH);
-    delay(1000);
+    delay(SHORT_PAUSE);
     digitalWrite(RED, LOW);
     digitalWrite(YELLOW, HIGH);
   } else {
