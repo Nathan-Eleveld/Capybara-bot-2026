@@ -14,7 +14,11 @@ void setup() {
   pinMode(LEFT_WHEEL_FORWARD, OUTPUT);
   pinMode(LEFT_WHEEL_BACKWARD, OUTPUT);
 
-  calibrateWheels();
+//  calibrateWheels();
+
+  Serial.begin(9600);
+  Serial.println(calibratePulse());
+  
 }
 
 void loop() {
@@ -36,7 +40,16 @@ void calibrateWheels() {
   analogWrite(LEFT_WHEEL_FORWARD,RANGE);
   delay(DELAY);
   analogWrite(LEFT_WHEEL_FORWARD,0);
-  analogWrite(LEFT_WHEEL_BACKWARD, RANGE);
+  analogWrite(LEFT_WHEEL_BACKWARD
+  
+  , RANGE);
   delay(DELAY);
   analogWrite(LEFT_WHEEL_BACKWARD, 0);
+}
+
+int calibratePulse(){
+  analogWrite(RIGHT_WHEEL_FORWARD, RANGE);
+  delay(DELAY);
+  analogWrite(RIGHT_WHEEL_FORWARD, 0);
+  return digitalRead(13);
 }
