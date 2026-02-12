@@ -23,16 +23,16 @@ void setup()
   pinMode(LEFT_IN, INPUT);
   Serial.begin(9600);
 
-  // initiates pins 2 and 3 to activate functions when going from LOW to HIGH
+  //initiates pins 2 and 3 to activate functions when going from LOW to HIGH
   attachInterrupt(digitalPinToInterrupt(RIGHT_IN), countPulseRightWheel, RISING);
   attachInterrupt(digitalPinToInterrupt(LEFT_IN), countPulseLeftWheel, RISING);
 
   //Forward 20 is een rotatie
-  // elke rotatie is ~20 cm
+  //elke rotatie is ~20 cm
   drive(80, 80);
   drive(-80, -80);
-//  drive(-10, 10);
-//  drive(10, -10);
+  drive(-10, 10);
+  drive(10, -10);
 }
   
 void loop() 
@@ -40,7 +40,7 @@ void loop()
   
 }
 
-// Function called when right wheel rotates 1/20th of a rotation
+//Function called when right wheel rotates 1/20th of a rotation
 void countPulseRightWheel()
 {
   if(millis() - LastInterruptRight > 20)
@@ -50,7 +50,7 @@ void countPulseRightWheel()
   }
 }
 
-// Function called when left wheel rotates 1/20th of a rotation
+//Function called when left wheel rotates 1/20th of a rotation
 void countPulseLeftWheel()
 {
   if(millis() - LastInterruptLeft > 20)
@@ -62,7 +62,7 @@ void countPulseLeftWheel()
 
 void drive(int RightDistance, int LeftDistance)
 { 
-  // Handles giong backward 
+  //Handles giong backward 
   if(RightDistance > 0)
   {
     RightWheel = RIGHT_FORWARD;
@@ -80,7 +80,7 @@ void drive(int RightDistance, int LeftDistance)
   LeftDistance = abs(LeftDistance);
 
   // keeps driving until the set distance is reached for each wheel
-  while(RightPulses <= RightDistance || LeftPulses <= LeftDistance)
+  while(RightPulses < RightDistance || LeftPulses < LeftDistance)
   {
     analogWrite(RightWheel, WHEEL_SPEED);
     analogWrite(LeftWheel, WHEEL_SPEED);
@@ -98,11 +98,11 @@ void drive(int RightDistance, int LeftDistance)
   // Stops wheel if destination is reached
     if(RightPulses >= RightDistance)
     {
-      analogWrite(RightWheel, 0);
+      analogWrite(LeftWheel, 0);
     }
     if(LeftPulses >= LeftDistance)
     {  
-      analogWrite(LeftWheel, 0);
+      analogWrite(RightWheel, 0);
     } 
     debug(LeftPulses, LeftDistance, RightPulses, RightDistance);
   }
