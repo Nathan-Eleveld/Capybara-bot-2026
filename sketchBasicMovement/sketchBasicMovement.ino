@@ -1,9 +1,9 @@
-const int PIN_1A = 10;
-const int PIN_2A = 9;
-const int PIN_1B = 6;
-const int PIN_2B = 5;
-const int PIN_1R = 13;
-const int PIN_2R = 12;
+const int RIGHT_BACKWARD = 10;
+const int RIGHT_FORWARD = 9;
+const int LEFT_BACKWARD = 6;
+const int LEFT_FORWARD = 5;
+const int RIGHT_IN = 2;
+const int LEFT_IN = 3;
 const int GRIPPER = 11;
 const byte WHEEL_SPEED = 255;
 int RightPulses = 0;
@@ -15,15 +15,15 @@ int LeftWheel;
 
 void setup() 
 {
-  pinMode(PIN_1A, OUTPUT);
-  pinMode(PIN_2A, OUTPUT);
-  pinMode(PIN_1B, OUTPUT);
-  pinMode(PIN_2B, OUTPUT);
-  pinMode(PIN_1R, INPUT);
-  pinMode(PIN_2R, INPUT);
+  pinMode(RIGHT_BACKWARD, OUTPUT);
+  pinMode(RIGHT_FORWARD, OUTPUT);
+  pinMode(LEFT_BACKWARD, OUTPUT);
+  pinMode(LEFT_FORWARD, OUTPUT);
+  pinMode(RIGHT_IN, INPUT);
+  pinMode(LEFT_IN, INPUT);
   Serial.begin(9600);
-  attachInterrupt(digitalPinToInterrupt(2), countPulseRightWheel, RISING);
-  attachInterrupt(digitalPinToInterrupt(3), countPulseLeftWheel, RISING);
+  attachInterrupt(digitalPinToInterrupt(RIGHT_IN), countPulseRightWheel, RISING);
+  attachInterrupt(digitalPinToInterrupt(LEFT_IN), countPulseLeftWheel, RISING);
 
   //Forward 20 is een rotatie
   // elke rotatie is ~20 cm
@@ -60,19 +60,20 @@ void drive(int RightDistance, int LeftDistance)
 {  
   if(RightDistance > 0)
   {
-    RightWheel = PIN_2A;
+    RightWheel = RIGHT_FORWARD;
   } else {
-    RightWheel = PIN_1A;
+    RightWheel = RIGHT_BACKWARD;
   }
 
   if(LeftDistance > 0)
   {
-    LeftWheel = PIN_2B;
+    LeftWheel = LEFT_FORWARD;
   } else {
-    LeftWheel = PIN_1B;
+    LeftWheel = LEFT_BACKWARD;
   }
   
-  while(RightPulses <= abs(RightDistance) || LeftPulses <= abs(LeftDistance)){
+  while(RightPulses <= abs(RightDistance) || LeftPulses <= abs(LeftDistance))
+  {
     analogWrite(RightWheel, WHEEL_SPEED);
     analogWrite(LeftWheel, WHEEL_SPEED);
 
