@@ -48,9 +48,9 @@ void loop()
 
 int ultraSonicSensor()
 {
-    static long lastActive = -500;
+    static unsigned long lastActive = 0;
 
-    if(millis() - lastActive < 500)
+    if(millis() > lastActive)
     {
       return distance;
     }
@@ -64,7 +64,7 @@ int ultraSonicSensor()
     duration = pulseIn(ULTRA_SONIC_ECHO, HIGH);
 
     distance = duration * 0.034 / 2;
-    lastActive = millis();
+    lastActive = millis() + 500;
     
     if (distance != 0)
     {
@@ -77,39 +77,36 @@ int ultraSonicSensor()
 //Function called when right wheel rotates 1/20th of a rotation
 void countPulseRightWheel()
 {
-  if(millis() - LastInterruptRight > 20)
+  if(millis() > LastInterruptRight)
   {
     RightPulses++;
-    LastInterruptRight = millis();
+    LastInterruptRight = millis() + 20;
   }
 }
 
 //Function called when left wheel rotates 1/20th of a rotation
 void countPulseLeftWheel()
 {
-  if(millis() - LastInterruptLeft > 20)
+  if(millis() > LastInterruptLeft)
   {
     LeftPulses++;
-    LastInterruptLeft = millis();
+    LastInterruptLeft = millis() + 20;
   }
 }
 
-void drive(int RightDistance, int LeftDistance)
-{ 
+void drive(int RightDistance, int LeftDistance) { 
   RightPulses = 0;
   LeftPulses = 0;
   
   turn = false;
   //Handles giong backward 
-  if(RightDistance > 0)
-  {
+  if(RightDistance > 0) {
     RightWheel = RIGHT_FORWARD;
   } else {
     turn = true;
     RightWheel = RIGHT_BACKWARD;
   }
-  if(LeftDistance > 0)
-  {
+  if(LeftDistance > 0) {
     LeftWheel = LEFT_FORWARD;
   } else {
     if(!turn)

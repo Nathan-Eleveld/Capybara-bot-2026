@@ -31,8 +31,8 @@ void setup()
   //elke rotatie is ~20 cm
   drive(80, 80);
   drive(-80, -80);
-  drive(0, 20);
-  drive(20, 0);
+  drive(1, 20);
+  drive(20, 1);
 }
   
 void loop() 
