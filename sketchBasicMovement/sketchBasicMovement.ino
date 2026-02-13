@@ -14,25 +14,25 @@ int RightWheel;
 int LeftWheel;
 
 void setup() 
-{
-  pinMode(RIGHT_BACKWARD, OUTPUT);
-  pinMode(RIGHT_FORWARD, OUTPUT);
-  pinMode(LEFT_BACKWARD, OUTPUT);
-  pinMode(LEFT_FORWARD, OUTPUT);
-  pinMode(RIGHT_IN, INPUT);
-  pinMode(LEFT_IN, INPUT);
-  Serial.begin(9600);
-
-  //initiates pins 2 and 3 to activate functions when going from LOW to HIGH
-  attachInterrupt(digitalPinToInterrupt(RIGHT_IN), countPulseRightWheel, RISING);
-  attachInterrupt(digitalPinToInterrupt(LEFT_IN), countPulseLeftWheel, RISING);
+  {
+    pinMode(RIGHT_BACKWARD, OUTPUT);
+    pinMode(RIGHT_FORWARD, OUTPUT);
+    pinMode(LEFT_BACKWARD, OUTPUT);
+    pinMode(LEFT_FORWARD, OUTPUT);
+    pinMode(RIGHT_IN, INPUT);
+    pinMode(LEFT_IN, INPUT);
+    Serial.begin(9600);
+  
+    //initiates pins 2 and 3 to activate functions when going from LOW to HIGH
+    attachInterrupt(digitalPinToInterrupt(RIGHT_IN), countPulseRightWheel, RISING);
+    attachInterrupt(digitalPinToInterrupt(LEFT_IN), countPulseLeftWheel, RISING);
 
   //Forward 20 is een rotatie
   //elke rotatie is ~20 cm
   drive(80, 80);
   drive(-80, -80);
-  drive(-10, 10);
-  drive(10, -10);
+  drive(0, 20);
+  drive(20, 0);
 }
   
 void loop() 
