@@ -71,7 +71,7 @@ void drive(){
     analogWrite(RIGHT_BACKWARD, 0);
     analogWrite(LEFT_BACKWARD, 0);
   
-  switch(getMedianReading()){
+  switch(getAverageSensorPin()){
     case 1:
       writeWheels(1, 0);
       break;
@@ -100,7 +100,7 @@ void drive(){
   }
 }
 
-int getMedianReading(){
+int getAverageSensorPin(){
   float medianReading = 0.0;
   int readingCount = 0;
   for(int i = 0; i < 8; i++){
