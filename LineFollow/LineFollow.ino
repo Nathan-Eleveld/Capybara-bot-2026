@@ -1,19 +1,19 @@
-const int   RIGHT_BACKWARD = 10;
-const int   RIGHT_FORWARD = 9;
-const int   LEFT_BACKWARD = 6;
-const int   LEFT_FORWARD = 5;
-const int   RIGHT_IN = 2;
-const int   LEFT_IN = 3;
-const byte  WHEEL_SPEED = 255;
-const int   SENSOR_PINS[8] = {A0, A1, A2, A3, A4, A5, A6, A7};
-int   sensorReadings[8];
-int   rightPulses = 0;
-int   lastInterruptRight = 0;
-int   leftPulses = 0;
-int   lastInterruptLeft = 0;
-int   rightWheel;
-int   leftWheel;
-bool  turn;
+const int RIGHT_BACKWARD = 10;
+const int RIGHT_FORWARD = 9;
+const int LEFT_BACKWARD = 6;
+const int LEFT_FORWARD = 5;
+const int RIGHT_IN = 2;
+const int LEFT_IN = 3;
+const byte WHEEL_SPEED = 255;
+const int SENSOR_PINS[8] = {A0, A1, A2, A3, A4, A5, A6, A7};
+int sensorReadings[8];
+int RightPulses = 0;
+int LastInterruptRight = 0;
+int LeftPulses = 0;
+int LastInterruptLeft = 0;
+int RightWheel;
+int LeftWheel;
+bool turn;
 
 void setup() {
   Serial.begin(9600);
@@ -27,8 +27,8 @@ void setup() {
   pinMode(RIGHT_IN, INPUT);
   pinMode(LEFT_IN, INPUT);
 
-  attachInterrupt(digitalPinToInterrupt(RIGHT_IN), countPulserightWheelISR, RISING);
-  attachInterrupt(digitalPinToInterrupt(LEFT_IN), countPulseleftWheelISR, RISING);
+  attachInterrupt(digitalPinToInterrupt(RIGHT_IN), countPulseRightWheel, RISING);
+  attachInterrupt(digitalPinToInterrupt(LEFT_IN), countPulseLeftWheel, RISING);
 }
 
 void loop() {
@@ -37,25 +37,28 @@ void loop() {
 }
 
 //Function called when right wheel rotates 1/20th of a rotation
-void countPulserightWheelISR(){
-  if(millis() > lastInterruptRight){
-    rightPulses++;
-    lastInterruptRight = millis() + 20;
+void countPulseRightWheel()
+{
+  if(millis() > LastInterruptRight)
+  {
+    RightPulses++;
+    LastInterruptRight = millis() + 20;
   }
 }
 
 //Function called when left wheel rotates 1/20th of a rotation
-void countPulseleftWheelISR(){
-  if(millis() > lastInterruptLeft){
-    leftPulses++;
-    lastInterruptLeft = millis() + 20;
+void countPulseLeftWheel()
+{
+  if(millis() > LastInterruptLeft)
+  {
+    LeftPulses++;
+    LastInterruptLeft = millis() + 20;
   }
 }
 
 void getReadings(){
   int i = 0;
-  for(int pin : SENSOR_PINS){RightWheel
-    
+  for(int pin : SENSOR_PINS){
     sensorReadings[i] = (analogRead(pin) < 700);
     //will be calibrated per sensor later
     i++;
@@ -67,33 +70,12 @@ void drive(){
     analogWrite(LEFT_FORWARD, 0);
     analogWrite(RIGHT_BACKWARD, 0);
     analogWrite(LEFT_BACKWARD, 0);
-  
+
   switch(getMedianReading()){
     case 1:
       writeWheels(1, 0);
       break;
-    case 2:
-      writeWheels(1, 0.5);
-      break;
-    case 3:
-      writeWheels(1, 0.8);
-      break;
-    case 4:
-      writeWheels(1, 1);
-      break;
-    case 5:
-      writeWheels(0.8, 1);
-      break;
-    case 6:
-      writeWheels(0.5, 1);
-      break;
-    case 7:
-      writeWheels(0, 1);
-      break;
-    case 0:
-      analogWrite(RIGHT_BACKWARD, WHEEL_SPEED);
-      analogWrite(LEFT_BACKWARD, WHEEL_SPEED);
-      break;
+@@ -100,30 +100,30 @@
   }
 }
 
