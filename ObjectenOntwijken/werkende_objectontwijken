@@ -1,0 +1,147 @@
+// Motor pins
+const int RIGHT_MOTOR_FORWARD = 9;
+const int RIGHT_MOTOR_BACKWARD = 10;
+const int LEFT_MOTOR_FORWARD = 5;
+const int LEFT_MOTOR_BACKWARD = 6;
+
+// Ultrasone sensor
+const int ULTRASONIC_TRIGGER = 7;
+const int ULTRASONIC_ECHO = 8;
+
+long duration;
+int distance;
+
+// Afstand instellingen
+const int SAFE_DISTANCE = 20;
+
+// TUNING CONSTANTS
+const int STOP_TIME_MS = 100;
+const int TURN_90_MS = 320;
+const int STEP_OUT_MS = 650;
+const int PASS_OBJECT_MS = 1000;
+const int STEP_BACK_MS = 650;
+const int PAUSE_MS = 200;
+
+void setup() {
+  pinMode(RIGHT_MOTOR_FORWARD, OUTPUT);
+  digitalWrite(RIGHT_MOTOR_FORWARD, LOW);
+
+  pinMode(RIGHT_MOTOR_BACKWARD, OUTPUT);
+  digitalWrite(RIGHT_MOTOR_BACKWARD, LOW);
+
+  pinMode(LEFT_MOTOR_FORWARD, OUTPUT);
+  digitalWrite(LEFT_MOTOR_FORWARD, LOW);
+
+  pinMode(LEFT_MOTOR_BACKWARD, OUTPUT);
+  digitalWrite(LEFT_MOTOR_BACKWARD, LOW);
+
+  pinMode(ULTRASONIC_TRIGGER, OUTPUT);
+  digitalWrite(ULTRASONIC_TRIGGER, LOW);
+
+  pinMode(ULTRASONIC_ECHO, INPUT);
+}
+
+void loop() {
+  distance = measureDistance();
+
+  if (distance > SAFE_DISTANCE) {
+    moveForward();
+  } else {
+    avoidObjectBox();
+  }
+}
+
+int measureDistance() {
+  // Trigger pulse sturen
+  digitalWrite(ULTRASONIC_TRIGGER, LOW);
+  delayMicroseconds(2);
+  digitalWrite(ULTRASONIC_TRIGGER, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(ULTRASONIC_TRIGGER, LOW);
+
+  // Meet echo tijd
+  duration = pulseIn(ULTRASONIC_ECHO, HIGH, 5000);
+
+  // Geen echo -> ver weg
+  if (duration == 0) {
+    return 999;
+  }
+
+  // Tijd -> afstand in cm
+  return (int)(duration * 0.034 / 2.0);
+}
+
+void moveForward() {
+  digitalWrite(RIGHT_MOTOR_FORWARD, HIGH);
+  digitalWrite(RIGHT_MOTOR_BACKWARD, LOW);
+
+  digitalWrite(LEFT_MOTOR_FORWARD, HIGH);
+  digitalWrite(LEFT_MOTOR_BACKWARD, LOW);
+}
+
+void stopMoving() {
+  digitalWrite(RIGHT_MOTOR_FORWARD, LOW);
+  digitalWrite(RIGHT_MOTOR_BACKWARD, LOW);
+
+  digitalWrite(LEFT_MOTOR_FORWARD, LOW);
+  digitalWrite(LEFT_MOTOR_BACKWARD, LOW);
+}
+
+void turnRight() {
+  digitalWrite(RIGHT_MOTOR_FORWARD, LOW);
+  digitalWrite(RIGHT_MOTOR_BACKWARD, HIGH);
+
+  digitalWrite(LEFT_MOTOR_FORWARD, HIGH);
+  digitalWrite(LEFT_MOTOR_BACKWARD, LOW);
+}
+
+void turnLeft() {
+  digitalWrite(RIGHT_MOTOR_FORWARD, HIGH);
+  digitalWrite(RIGHT_MOTOR_BACKWARD, LOW);
+
+  digitalWrite(LEFT_MOTOR_FORWARD, LOW);
+  digitalWrite(LEFT_MOTOR_BACKWARD, HIGH);
+}
+
+// Box-ontwijking: komt terug op originele pad
+void avoidObjectBox() {
+  stopMoving();
+  delay(STOP_TIME_MS);
+
+  turnRight();
+  delay(TURN_90_MS);
+  stopMoving();
+  delay(PAUSE_MS);
+
+  moveForward();
+  delay(STEP_OUT_MS);
+  stopMoving();
+  delay(PAUSE_MS);
+
+  turnLeft();
+  delay(TURN_90_MS);
+  stopMoving();
+  delay(PAUSE_MS);
+
+  moveForward();
+  delay(PASS_OBJECT_MS);
+  stopMoving();
+  delay(PAUSE_MS);
+
+  turnLeft();
+  delay(TURN_90_MS);
+  stopMoving();
+  delay(PAUSE_MS);
+
+  moveForward();
+  delay(STEP_BACK_MS);
+  stopMoving();
+  delay(PAUSE_MS);
+
+  turnRight();
+  delay(TURN_90_MS);
+  stopMoving();
+  delay(PAUSE_MS);
+
+  moveForward();
+}
