@@ -14,7 +14,7 @@ int   leftPulses = 0;
 int   lastInterruptLeft = 0;
 int   rightWheel;
 int   leftWheel;
-bool  turn;
+int   winFrames;
 
 #define DEBUG
 
@@ -42,8 +42,15 @@ void setup() {
 }
 
 void loop(){
-  getReadings(); 
-  drive();
+  if(!winDetect()){
+    getReadings(); 
+    drive();
+  } else {
+    analogWrite(RIGHT_FORWARD, 0);
+    analogWrite(LEFT_FORWARD, 0);
+    analogWrite(RIGHT_BACKWARD, 0);
+    analogWrite(LEFT_BACKWARD, 0);
+  }
 }
 
 void calibrateBoundrys(){
@@ -162,6 +169,26 @@ void getOnTrack(){
   while(millis() < 1300){
     analogWrite(LEFT_FORWARD, WHEEL_SPEED);
   }
-  analogWrite(RIGHT_FORWARD, 0);
-  analogWrite(LEFT_BACKWARD, 0);
+  analogWrite(LEFT_FORWARD, 0);
+}
+
+bool winDetect(){
+  int sensorsActive = 0;
+  for(int reading : sensorReadings){
+    sensorsActive += reading;
+  }
+  if(sensorsActive < 2){
+    winFrames++;
+  }else{
+    winFrames = 0;
+  }
+  #ifdef DEBUG
+    Serial.print(winFrames);
+    Serial.print(" --- ");
+  #endif
+  if(winFrames > 20){
+    return true;
+  } else {
+    return false;
+  }
 }
