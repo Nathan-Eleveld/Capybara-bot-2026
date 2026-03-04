@@ -84,7 +84,7 @@ void drive() {
   switch (getAverageSensorPin()) {
 
     case 1:
-      writeWheels(1, 0.2); // minder extreem sturen
+      writeWheels(1, 0);
       break;
 
     case 2:
@@ -92,7 +92,7 @@ void drive() {
       break;
 
     case 3:
-      writeWheels(1, 0.8);
+      writeWheels(1, 0.75);
       break;
 
     case 4:
@@ -100,7 +100,7 @@ void drive() {
       break;
 
     case 5:
-      writeWheels(0.8, 1);
+      writeWheels(0.75, 1);
       break;
 
     case 6:
@@ -108,7 +108,7 @@ void drive() {
       break;
 
     case 7:
-      writeWheels(0.2, 1); // minder extreem sturen
+      writeWheels(0, 1);
       break;
 
     case 0:
