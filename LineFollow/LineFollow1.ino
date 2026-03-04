@@ -17,11 +17,13 @@ volatile int leftPulses  = 0;
 volatile unsigned long lastInterruptRight = 0;
 volatile unsigned long lastInterruptLeft  = 0;
 
+float lastError = 0.0; // laatste afwijking t.o.v. midden (voor terugvinden lijn)
+
 void setup() {
-  Serial.begin(9600); // seriële debug
+  Serial.begin(9600);
 
   for (int i = 0; i < 8; i++) {
-    pinMode(SENSOR_PINS[i], INPUT); // sensors
+    pinMode(SENSOR_PINS[i], INPUT);
   }
 
   pinMode(RIGHT_BACKWARD, OUTPUT);
@@ -29,21 +31,21 @@ void setup() {
   pinMode(LEFT_BACKWARD,  OUTPUT);
   pinMode(LEFT_FORWARD,   OUTPUT);
 
-  digitalWrite(RIGHT_BACKWARD, LOW); // motoren uit bij start
+  digitalWrite(RIGHT_BACKWARD, LOW);
   digitalWrite(RIGHT_FORWARD,  LOW);
   digitalWrite(LEFT_BACKWARD,  LOW);
   digitalWrite(LEFT_FORWARD,   LOW);
 
-  pinMode(RIGHT_IN, INPUT_PULLUP); // encoder rechts
-  pinMode(LEFT_IN,  INPUT_PULLUP); // encoder links
+  pinMode(RIGHT_IN, INPUT_PULLUP);
+  pinMode(LEFT_IN,  INPUT_PULLUP);
 
   attachInterrupt(digitalPinToInterrupt(RIGHT_IN), countPulseRightWheelISR, RISING);
   attachInterrupt(digitalPinToInterrupt(LEFT_IN),  countPulseLeftWheelISR,  RISING);
 }
 
 void loop() {
-  getReadings(); // sensoren lezen
-  drive();       // direct sturen
+  getReadings();
+  drive();
 }
 
 // encoder pulsen tellen (20ms debounce)
@@ -63,36 +65,11 @@ void countPulseLeftWheelISR() {
   }
 }
 
-// 1 = lijn, 0 = geen lijn (threshold)
+// 1 = zwarte lijn, 0 = geen lijn (threshold)
 void getReadings() {
   for (int i = 0; i < 8; i++) {
     int raw = analogRead(SENSOR_PINS[i]);
     sensorReadings[i] = raw > 700;
-  }
-}
-
-// sneller centreren: agressiever sturen + geen stopMotors() elke loop
-void drive() {
-  // achteruit altijd uit tijdens normaal vooruit rijden
-  analogWrite(RIGHT_BACKWARD, 0);
-  analogWrite(LEFT_BACKWARD,  0);
-
-  switch (getAverageSensorPin()) {
-    case 1: writeWheels(1.0, 0.0); break; // harder terug naar de lijn
-    case 2: writeWheels(1.0, 0.3); break; // sneller corrigeren
-    case 3: writeWheels(1.0, 0.7); break;
-    case 4: writeWheels(1.0, 1.0); break;
-    case 5: writeWheels(0.7, 1.0); break;
-    case 6: writeWheels(0.3, 1.0); break; // sneller corrigeren
-    case 7: writeWheels(0.0, 1.0); break; // harder terug naar de lijn
-
-    case 0:
-      // lijn kwijt: vooruit uit, achteruit aan
-      analogWrite(RIGHT_FORWARD, 0);
-      analogWrite(LEFT_FORWARD,  0);
-      analogWrite(RIGHT_BACKWARD, WHEEL_SPEED);
-      analogWrite(LEFT_BACKWARD,  WHEEL_SPEED);
-      break;
   }
 }
 
@@ -110,13 +87,44 @@ int getAverageSensorPin() {
 
   if (count == 0) return 0;
 
-  return (int)(sum / count + 0.5); // afronden voor stabielere position
+  return (int)(sum / count + 0.5);
 }
 
-// vooruit snelheid per wiel met multiplier
-void writeWheels(float multiplierRight, float multiplierLeft) {
-  analogWrite(RIGHT_FORWARD, (int)(WHEEL_SPEED * multiplierRight));
-  analogWrite(LEFT_FORWARD,  (int)(WHEEL_SPEED * multiplierLeft));
+// motoren sturen zodat de lijn naar het midden (sensor 4/5) terugkomt
+void drive() {
+  const int BASE_SPEED = 220;  // basis vooruit snelheid
+  const int KP = 60;           // hoe hard hij corrigeert
+
+  analogWrite(RIGHT_BACKWARD, 0);
+  analogWrite(LEFT_BACKWARD,  0);
+
+  int pos = getAverageSensorPin();
+
+  if (pos == 0) {
+    // lijn kwijt: zoeken in richting van laatste afwijking
+    if (lastError < 0) {
+      analogWrite(RIGHT_FORWARD, BASE_SPEED);
+      analogWrite(LEFT_FORWARD,  0);
+    } else {
+      analogWrite(RIGHT_FORWARD, 0);
+      analogWrite(LEFT_FORWARD,  BASE_SPEED);
+    }
+    return;
+  }
+
+  float error = pos - 4.5;     // midden tussen sensor 4 en 5
+  lastError = error;
+
+  int correction = (int)(KP * error);
+
+  int rightSpeed = BASE_SPEED - correction;
+  int leftSpeed  = BASE_SPEED + correction;
+
+  rightSpeed = constrain(rightSpeed, 0, WHEEL_SPEED);
+  leftSpeed  = constrain(leftSpeed,  0, WHEEL_SPEED);
+
+  analogWrite(RIGHT_FORWARD, rightSpeed);
+  analogWrite(LEFT_FORWARD,  leftSpeed);
 }
 
 // debug sensorwaarden
