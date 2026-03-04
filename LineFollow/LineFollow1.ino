@@ -1,130 +1,126 @@
-const int RIGHT_BACKWARD = 10;
-const int RIGHT_FORWARD  = 9;
-const int LEFT_BACKWARD  = 6;
-const int LEFT_FORWARD   = 5;
-
-const int RIGHT_IN = 2;
-const int LEFT_IN  = 3;
-
-const byte WHEEL_SPEED = 255;
-
-const int SENSOR_PINS[8] = {A0, A1, A2, A3, A4, A5, A6, A7};
-int sensorReadings[8];
-
-volatile int rightPulses = 0;
-volatile int leftPulses  = 0;
-
-volatile unsigned long lastInterruptRight = 0;
-volatile unsigned long lastInterruptLeft  = 0;
+const int   RIGHT_BACKWARD = 10;
+const int   RIGHT_FORWARD = 9;
+const int   LEFT_BACKWARD = 6;
+const int   LEFT_FORWARD = 5;
+const int   RIGHT_IN = 2;
+const int   LEFT_IN = 3;
+const byte  WHEEL_SPEED = 255;
+const int   SENSOR_PINS[8] = {A0, A1, A2, A3, A4, A5, A6, A7};
+int   sensorReadings[8];
+int   rightPulses = 0;
+int   lastInterruptRight = 0;
+int   leftPulses = 0;
+int   lastInterruptLeft = 0;
+int   rightWheel;
+int   leftWheel;
+bool  turn;
 
 void setup() {
-  Serial.begin(9600); // seriële debug
-
-  for (int i = 0; i < 8; i++) {
-    pinMode(SENSOR_PINS[i], INPUT); // sensors
+  Serial.begin(9600);
+  for(int pin : SENSOR_PINS){
+    pinMode(pin, INPUT);    
   }
-
   pinMode(RIGHT_BACKWARD, OUTPUT);
-  pinMode(RIGHT_FORWARD,  OUTPUT);
-  pinMode(LEFT_BACKWARD,  OUTPUT);
-  pinMode(LEFT_FORWARD,   OUTPUT);
+  pinMode(RIGHT_FORWARD, OUTPUT);
+  pinMode(LEFT_BACKWARD, OUTPUT);
+  pinMode(LEFT_FORWARD, OUTPUT);
+  pinMode(RIGHT_IN, INPUT);
+  pinMode(LEFT_IN, INPUT);
 
-  digitalWrite(RIGHT_BACKWARD, LOW); // motoren uit bij start
-  digitalWrite(RIGHT_FORWARD,  LOW);
-  digitalWrite(LEFT_BACKWARD,  LOW);
-  digitalWrite(LEFT_FORWARD,   LOW);
-
-  pinMode(RIGHT_IN, INPUT_PULLUP); // encoder rechts
-  pinMode(LEFT_IN,  INPUT_PULLUP); // encoder links
-
-  attachInterrupt(digitalPinToInterrupt(RIGHT_IN), countPulseRightWheelISR, RISING);
-  attachInterrupt(digitalPinToInterrupt(LEFT_IN),  countPulseLeftWheelISR,  RISING);
+  attachInterrupt(digitalPinToInterrupt(RIGHT_IN), countPulserightWheelISR, RISING);
+  attachInterrupt(digitalPinToInterrupt(LEFT_IN), countPulseleftWheelISR, RISING);
 }
 
 void loop() {
-  getReadings(); // sensoren lezen
-  drive();       // direct sturen
+  getReadings(); 
+  drive();
 }
 
-// encoder pulsen tellen (20ms debounce)
-void countPulseRightWheelISR() {
-  unsigned long now = millis();
-  if (now >= lastInterruptRight) {
+//Function called when right wheel rotates 1/20th of a rotation
+void countPulserightWheelISR(){
+  if(millis() > lastInterruptRight){
     rightPulses++;
-    lastInterruptRight = now + 20;
+    lastInterruptRight = millis() + 20;
   }
 }
 
-void countPulseLeftWheelISR() {
-  unsigned long now = millis();
-  if (now >= lastInterruptLeft) {
+//Function called when left wheel rotates 1/20th of a rotation
+void countPulseleftWheelISR(){
+  if(millis() > lastInterruptLeft){
     leftPulses++;
-    lastInterruptLeft = now + 20;
+    lastInterruptLeft = millis() + 20;
   }
 }
 
-// 1 = lijn, 0 = geen lijn (threshold)
-void getReadings() {
-  for (int i = 0; i < 8; i++) {
-    int raw = analogRead(SENSOR_PINS[i]);
-    sensorReadings[i] = raw > 700;
+void getReadings(){
+  int i = 0;
+  for(int pin : SENSOR_PINS){
+  RightWheel
+    sensorReadings[i] = (analogRead(pin) < 700);
+    //will be calibrated per sensor later
+    i++;
   }
 }
 
-// sneller centreren: agressiever sturen + geen stopMotors() elke loop
-void drive() {
-  // achteruit altijd uit tijdens normaal vooruit rijden
-  analogWrite(RIGHT_BACKWARD, 0);
-  analogWrite(LEFT_BACKWARD,  0);
-
-  switch (getAverageSensorPin()) {
-    case 1: writeWheels(1.0, 0.0); break; // harder terug naar de lijn
-    case 2: writeWheels(1.0, 0.3); break; // sneller corrigeren
-    case 3: writeWheels(1.0, 0.7); break;
-    case 4: writeWheels(1.0, 1.0); break;
-    case 5: writeWheels(0.7, 1.0); break;
-    case 6: writeWheels(0.3, 1.0); break; // sneller corrigeren
-    case 7: writeWheels(0.0, 1.0); break; // harder terug naar de lijn
-
+void drive(){
+    analogWrite(RIGHT_FORWARD, 0);
+    analogWrite(LEFT_FORWARD, 0);
+    analogWrite(RIGHT_BACKWARD, 0);
+    analogWrite(LEFT_BACKWARD, 0);
+  
+  switch(getAverageSensorPin()){
+    case 1:
+      writeWheels(1, 0);
+      break;
+    case 2:
+      writeWheels(1, 0.5);
+      break;
+    case 3:
+      writeWheels(1, 0.75);
+      break;
+    case 4:
+      writeWheels(1, 1);
+      break;
+    case 5:
+      writeWheels(0.75, 1);
+      break;
+    case 6:
+      writeWheels(0.5, 1);
+      break;
+    case 7:
+      writeWheels(0, 1);
+      break;
     case 0:
-      // lijn kwijt: vooruit uit, achteruit aan
-      analogWrite(RIGHT_FORWARD, 0);
-      analogWrite(LEFT_FORWARD,  0);
       analogWrite(RIGHT_BACKWARD, WHEEL_SPEED);
-      analogWrite(LEFT_BACKWARD,  WHEEL_SPEED);
+      analogWrite(LEFT_BACKWARD, WHEEL_SPEED);
       break;
   }
 }
 
-// gemiddelde positie van actieve sensoren (1..8), anders 0
-int getAverageSensorPin() {
-  float sum = 0.0;
-  int count = 0;
-
-  for (int i = 0; i < 8; i++) {
-    if (sensorReadings[i]) {
-      sum += i + 1;
-      count++;
+int getAverageSensorPin(){
+  float medianReading = 0.0;
+  int readingCount = 0;
+  for(int i = 0; i < 8; i++){
+    if(!sensorReadings[i]){
+      medianReading += i+ 1;
+      readingCount++;
     }
-  }
-
-  if (count == 0) return 0;
-
-  return (int)(sum / count + 0.5); // afronden voor stabielere position
+  }  
+  return medianReading / readingCount;
 }
 
-// vooruit snelheid per wiel met multiplier
-void writeWheels(float multiplierRight, float multiplierLeft) {
-  analogWrite(RIGHT_FORWARD, (int)(WHEEL_SPEED * multiplierRight));
-  analogWrite(LEFT_FORWARD,  (int)(WHEEL_SPEED * multiplierLeft));
+void writeWheels(float multiplierRight, float multiplierLeft){
+  analogWrite(RIGHT_FORWARD, WHEEL_SPEED * multiplierRight);
+  analogWrite(LEFT_FORWARD, WHEEL_SPEED * multiplierLeft);
 }
 
-// debug sensorwaarden
-void printReadings() {
+void printReadings(){
+  int i = 0;
   Serial.println("---------------");
-  for (int i = 0; i < 8; i++) {
+  for(int reading : sensorReadings){
     Serial.print(i);
     Serial.print(": ");
-    Serial.println(sensorReadings[i]);
+    Serial.println(reading);
+    i++;
   }
 }
