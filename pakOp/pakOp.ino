@@ -16,7 +16,7 @@ int LeftPulses = 0;
 int LastInterruptLeft = 0;
 int RightWheel;
 int LeftWheel;
-bool turn;
+bool firstStop = true;
 
 unsigned long lastServoPulse = 0;
 int servoPulseWidth = 1100;
@@ -36,14 +36,17 @@ void setup() {
   //initiates pins 2 and 3 to activate functions when going from LOW to HIGH
   attachInterrupt(digitalPinToInterrupt(RIGHT_IN), countPulseRightWheel, RISING);
   attachInterrupt(digitalPinToInterrupt(LEFT_IN), countPulseLeftWheel, RISING);
-
+  
   clawOpen(true);
 }
 
 void loop() {
   Serial.println(ultraSonicSensor());
-
-  updateServo();
+  drive(50, 50);
+  drive(50, 50);
+  while(true){
+    clawOpen(false);
+  }
 }
 
 //Function called when right wheel rotates 1/20th of a rotation
@@ -70,23 +73,15 @@ void drive(int RightDistance, int LeftDistance) {
   RightPulses = 0;
   LeftPulses = 0;
   
-  turn = false;
   //Handles giong backward 
   if(RightDistance > 0) {
     RightWheel = RIGHT_FORWARD;
   } else {
-    turn = true;
     RightWheel = RIGHT_BACKWARD;
   }
   if(LeftDistance > 0) {
     LeftWheel = LEFT_FORWARD;
   } else {
-    if(!turn)
-    {
-      turn = true;
-    } else {
-      turn = false;
-    }
     LeftWheel = LEFT_BACKWARD;
   }
 
@@ -98,18 +93,15 @@ void drive(int RightDistance, int LeftDistance) {
   {   
     analogWrite(RightWheel, WHEEL_SPEED);
     analogWrite(LeftWheel, WHEEL_SPEED);
-
+ 
   // Compensates if one wheel is going faster than the other
-    if(!turn)
+    if(LeftPulses > RightPulses)
     {
-      if(LeftPulses > RightPulses)
-      {
-        analogWrite(RightWheel, WHEEL_SPEED / 1.5);
-      }
-      if(RightPulses > LeftPulses)
-      {
-        analogWrite(LeftWheel, WHEEL_SPEED / 1.5);
-      }
+      analogWrite(RightWheel, WHEEL_SPEED / 1.5);
+    }
+    if(RightPulses > LeftPulses)
+    {
+      analogWrite(LeftWheel, WHEEL_SPEED / 1.5);
     }
   // Stops wheel if destination is reached
     if(RightPulses >= RightDistance)
@@ -120,12 +112,19 @@ void drive(int RightDistance, int LeftDistance) {
     {  
       analogWrite(RightWheel, 0);
     }
+
+    if(ultraSonicSensor() < 7 && firstStop){
+      analogWrite(RightWheel, 0);
+      analogWrite(LeftWheel, 0);
+      delay(300);
+      firstStop = false;
+    }
+    clawOpen(ultraSonicSensor() > 7);
   }
   analogWrite(RightWheel, 0);
   analogWrite(LeftWheel, 0);
   RightPulses = 0;
   LeftPulses = 0;
-  delay(500);
 }
 
 int ultraSonicSensor()
@@ -156,19 +155,6 @@ int ultraSonicSensor()
     }
 }
 
-bool detectObstacle()
-{
-  if (ultraSonicSensor() < 4){
-    clawOpen(false);
-    return true;
-  }   
-  else
-  {
-    clawOpen(true);
-    return false;
-  }
-}
-
 void updateServo()
 {
   if (micros() - lastServoPulse >= 20000)
@@ -190,7 +176,7 @@ void clawOpen(bool open)
   }
   else
   {
-    servoPulseWidth = 1100;
+    servoPulseWidth = 1000;
     updateServo();
   }
 }
