@@ -54,8 +54,8 @@ void countPulseleftWheelISR(){
 
 void getReadings(){
   int i = 0;
-  for(int pin : SENSOR_PINS){RightWheel
-    
+  for(int pin : SENSOR_PINS){
+  RightWheel
     sensorReadings[i] = (analogRead(pin) < 700);
     //will be calibrated per sensor later
     i++;
