@@ -6,7 +6,7 @@
 #define LEFT_IN 3
 #define WHEEL_SPEED 255
 const int   SENSOR_PINS[8] = {A0, A1, A2, A3, A4, A5, A6, A7};
-int   SENSOR_BOUNDRY[8] = {0,0,0,0,0,0,0,0};
+int   sensorBoundry[8] = {0,0,0,0,0,0,0,0};
 int   sensorReadings[8];
 int   rightPulses = 0;
 int   lastInterruptRight = 0;
@@ -25,7 +25,8 @@ void setup() {
   #endif
   
   for(int pin : SENSOR_PINS){
-    pinMode(pin, INPUT);    
+    pinMode(pin, INPUT);   
+    digitalWrite(pin, LOW); 
   }
   pinMode(RIGHT_BACKWARD, OUTPUT);
   pinMode(RIGHT_FORWARD, OUTPUT);
@@ -33,6 +34,8 @@ void setup() {
   pinMode(LEFT_FORWARD, OUTPUT);
   pinMode(RIGHT_IN, INPUT);
   pinMode(LEFT_IN, INPUT);
+
+  stopWheels();
 
   attachInterrupt(digitalPinToInterrupt(RIGHT_IN), countPulserightWheelISR, RISING);
   attachInterrupt(digitalPinToInterrupt(LEFT_IN), countPulseleftWheelISR, RISING);
@@ -46,10 +49,7 @@ void loop(){
     getReadings(); 
     drive();
   } else {
-    analogWrite(RIGHT_FORWARD, 0);
-    analogWrite(LEFT_FORWARD, 0);
-    analogWrite(RIGHT_BACKWARD, 0);
-    analogWrite(LEFT_BACKWARD, 0);
+    stopWheels();
   }
 }
 
@@ -60,17 +60,17 @@ void calibrateBoundrys(){
     analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
     analogWrite(LEFT_FORWARD, WHEEL_SPEED);
     for(int i = 0; i < 8; i++){
-      temp[i] = SENSOR_BOUNDRY[i] + analogRead(SENSOR_PINS[i]);
-      SENSOR_BOUNDRY[i] = temp[i];
-      Serial.println(SENSOR_BOUNDRY[i]);
+      temp[i] = sensorBoundry[i] + analogRead(SENSOR_PINS[i]);
+      sensorBoundry[i] = temp[i];
+      Serial.println(sensorBoundry[i]);
     }
     readingCount++;
     Serial.println("---");
   }
    
   for(int i = 0; i < 8; i++){
-    SENSOR_BOUNDRY[i] = temp[i] / readingCount;
-    Serial.println(SENSOR_BOUNDRY[i]);
+    sensorBoundry[i] = temp[i] / readingCount;
+    Serial.println(sensorBoundry[i]);
   }
   analogWrite(RIGHT_FORWARD, 0);
   analogWrite(LEFT_FORWARD, 0);
@@ -96,16 +96,13 @@ void countPulseleftWheelISR(){
 void getReadings(){
   int i = 0;
   for(int pin : SENSOR_PINS){
-    sensorReadings[i] = (analogRead(pin) < SENSOR_BOUNDRY[i]);
+    sensorReadings[i] = (analogRead(pin) < sensorBoundry[i]);
     i++;
   }
 }
 
 void drive(){
-    analogWrite(RIGHT_FORWARD, 0);
-    analogWrite(LEFT_FORWARD, 0);
-    analogWrite(RIGHT_BACKWARD, 0);
-    analogWrite(LEFT_BACKWARD, 0);
+    stopWheels();
   
   switch(getAverageSensorPin()){
     case 1:
@@ -170,6 +167,13 @@ void getOnTrack(){
     analogWrite(LEFT_FORWARD, WHEEL_SPEED);
   }
   analogWrite(LEFT_FORWARD, 0);
+}
+
+void stopWheels(){
+  analogWrite(RIGHT_FORWARD, 0);
+  analogWrite(LEFT_FORWARD, 0);
+  analogWrite(RIGHT_BACKWARD, 0);
+  analogWrite(LEFT_BACKWARD, 0);
 }
 
 bool winDetect(){
