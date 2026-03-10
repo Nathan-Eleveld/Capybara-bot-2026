@@ -1,5 +1,10 @@
+long duration;
+int distance;
+
 const int RIGHT_BACKWARD = 10;
 const int RIGHT_FORWARD = 9;
+const int ULTRA_SONIC_TRIG = 8;
+const int ULTRA_SONIC_ECHO = 7;
 const int LEFT_BACKWARD = 6;
 const int LEFT_FORWARD = 5;
 const int RIGHT_IN = 2;
@@ -7,19 +12,29 @@ const int LEFT_IN = 3;
 const int GRIPPER = 11;
 
 const byte WHEEL_SPEED = 255;
+const byte SEARCH_SPEED = 255;
 
-int RightPulses = 0;
-int LastInterruptRight = 0;
-int LeftPulses = 0;
-int LastInterruptLeft = 0;
+const int DETECT_DISTANCE = 7;
+const int PULSES_25_CM = 50;
+
+volatile int RightPulses = 0;
+volatile int LastInterruptRight = 0;
+volatile int LeftPulses = 0;
+volatile int LastInterruptLeft = 0;
 
 int RightWheel;
 int LeftWheel;
 
 unsigned long lastServoPulse = 0;
-int servoPulseWidth = 1100;
+int servoPulseWidth = 1500;
+
+int stepNumber = 0;
+unsigned long stepStartTime = 0;
+bool stepStarted = false;
 
 void setup() {
+  pinMode(ULTRA_SONIC_TRIG, OUTPUT);
+  pinMode(ULTRA_SONIC_ECHO, INPUT);
   pinMode(RIGHT_BACKWARD, OUTPUT);
   pinMode(RIGHT_FORWARD, OUTPUT);
   pinMode(LEFT_BACKWARD, OUTPUT);
@@ -37,14 +52,10 @@ void setup() {
 }
 
 void loop() {
-  drive(50, 50);
-
-  while (true) {
-    clawOpen(false);
-  }
+  updateServo();
+  runSteps();
 }
 
-// Wordt uitgevoerd bij elke puls van het rechter wiel
 void countPulseRightWheel() {
   if (millis() > LastInterruptRight) {
     RightPulses++;
@@ -52,7 +63,6 @@ void countPulseRightWheel() {
   }
 }
 
-// Wordt uitgevoerd bij elke puls van het linker wiel
 void countPulseLeftWheel() {
   if (millis() > LastInterruptLeft) {
     LeftPulses++;
@@ -60,59 +70,212 @@ void countPulseLeftWheel() {
   }
 }
 
-void drive(int RightDistance, int LeftDistance) {
-  RightPulses = 0;
-  LeftPulses = 0;
+void runSteps() {
+  switch (stepNumber) {
+    case 0:
+      startStep();
+      clawOpen(true);
 
-  if (RightDistance > 0) {
-    RightWheel = RIGHT_FORWARD;
-  } else {
-    RightWheel = RIGHT_BACKWARD;
+      if (millis() - stepStartTime >= 1000) {
+        nextStep();
+      }
+      break;
+
+    case 1:
+      startStep();
+      clawOpen(false);
+
+      if (millis() - stepStartTime >= 1000) {
+        nextStep();
+      }
+      break;
+
+    case 2:
+      startStep();
+      clawOpen(true);
+
+      if (millis() - stepStartTime >= 1000) {
+        nextStep();
+      }
+      break;
+
+    case 3:
+      startStep();
+
+      if (driveUntilConeOrDistance(PULSES_25_CM, PULSES_25_CM)) {
+        nextStep();
+      }
+      break;
+
+    case 4:
+      startStep();
+      clawOpen(false);
+
+      if (millis() - stepStartTime >= 1000) {
+        nextStep();
+      }
+      break;
+
+    case 5:
+      startStep();
+
+      if (driveFixedDistance(PULSES_25_CM, PULSES_25_CM)) {
+        nextStep();
+      }
+      break;
+
+    case 6:
+      clawOpen(false);
+      stopMotors();
+      break;
+  }
+}
+
+void startStep() {
+  if (!stepStarted) {
+    stepStarted = true;
+    stepStartTime = millis();
+  }
+}
+
+void nextStep() {
+  stepNumber++;
+  stepStarted = false;
+}
+
+bool driveUntilConeOrDistance(int RightDistance, int LeftDistance) {
+  static bool started = false;
+
+  if (!started) {
+    RightPulses = 0;
+    LeftPulses = 0;
+    started = true;
   }
 
-  if (LeftDistance > 0) {
-    LeftWheel = LEFT_FORWARD;
-  } else {
-    LeftWheel = LEFT_BACKWARD;
+  RightWheel = RIGHT_FORWARD;
+  LeftWheel = LEFT_FORWARD;
+
+  int currentDistance = ultraSonicSensor();
+  Serial.println(currentDistance);
+
+  if (currentDistance <= DETECT_DISTANCE) {
+    stopMotors();
+    started = false;
+    RightPulses = 0;
+    LeftPulses = 0;
+    return true;
   }
 
-  RightDistance = abs(RightDistance);
-  LeftDistance = abs(LeftDistance);
+  if (RightPulses < RightDistance) {
+    analogWrite(RightWheel, SEARCH_SPEED);
+  } else {
+    analogWrite(RightWheel, 0);
+  }
 
-  while (RightPulses < RightDistance || LeftPulses < LeftDistance) {
+  if (LeftPulses < LeftDistance) {
+    analogWrite(LeftWheel, SEARCH_SPEED);
+  } else {
+    analogWrite(LeftWheel, 0);
+  }
+
+  if (LeftPulses > RightPulses && RightPulses < RightDistance) {
+    analogWrite(RightWheel, SEARCH_SPEED / 2);
+  }
+
+  if (RightPulses > LeftPulses && LeftPulses < LeftDistance) {
+    analogWrite(LeftWheel, SEARCH_SPEED / 2);
+  }
+
+  if (RightPulses >= RightDistance && LeftPulses >= LeftDistance) {
+    stopMotors();
+    started = false;
+    RightPulses = 0;
+    LeftPulses = 0;
+    return true;
+  }
+
+  return false;
+}
+
+bool driveFixedDistance(int RightDistance, int LeftDistance) {
+  static bool started = false;
+
+  if (!started) {
+    RightPulses = 0;
+    LeftPulses = 0;
+    started = true;
+  }
+
+  RightWheel = RIGHT_FORWARD;
+  LeftWheel = LEFT_FORWARD;
+
+  if (RightPulses < RightDistance) {
     analogWrite(RightWheel, WHEEL_SPEED);
-    analogWrite(LeftWheel, WHEEL_SPEED);
-
-    if (LeftPulses > RightPulses) {
-      analogWrite(RightWheel, WHEEL_SPEED / 1.5);
-    }
-
-    if (RightPulses > LeftPulses) {
-      analogWrite(LeftWheel, WHEEL_SPEED / 1.5);
-    }
-
-    if (RightPulses >= RightDistance) {
-      analogWrite(RightWheel, 0);
-    }
-
-    if (LeftPulses >= LeftDistance) {
-      analogWrite(LeftWheel, 0);
-    }
-
-    clawOpen(true);
+  } else {
+    analogWrite(RightWheel, 0);
   }
 
-  analogWrite(RightWheel, 0);
-  analogWrite(LeftWheel, 0);
+  if (LeftPulses < LeftDistance) {
+    analogWrite(LeftWheel, WHEEL_SPEED);
+  } else {
+    analogWrite(LeftWheel, 0);
+  }
 
-  RightPulses = 0;
-  LeftPulses = 0;
+  if (LeftPulses > RightPulses && RightPulses < RightDistance) {
+    analogWrite(RightWheel, WHEEL_SPEED / 2);
+  }
+
+  if (RightPulses > LeftPulses && LeftPulses < LeftDistance) {
+    analogWrite(LeftWheel, WHEEL_SPEED / 2);
+  }
+
+  if (RightPulses >= RightDistance && LeftPulses >= LeftDistance) {
+    stopMotors();
+    started = false;
+    RightPulses = 0;
+    LeftPulses = 0;
+    return true;
+  }
+
+  return false;
+}
+
+void stopMotors() {
+  analogWrite(RIGHT_FORWARD, 0);
+  analogWrite(RIGHT_BACKWARD, 0);
+  analogWrite(LEFT_FORWARD, 0);
+  analogWrite(LEFT_BACKWARD, 0);
+}
+
+int ultraSonicSensor() {
+  static unsigned long lastActive = 0;
+
+  if (millis() < lastActive) {
+    return distance;
+  }
+
+  digitalWrite(ULTRA_SONIC_TRIG, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(ULTRA_SONIC_TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(ULTRA_SONIC_TRIG, LOW);
+
+  duration = pulseIn(ULTRA_SONIC_ECHO, HIGH, 25000);
+
+  if (duration == 0) {
+    return 999;
+  }
+
+  distance = duration * 0.034 / 2;
+  lastActive = millis() + 100;
+
+  return distance;
 }
 
 void updateServo() {
-  if (micros() - lastServoPulse >= 20000) {
-    lastServoPulse = micros();
-
+  if (millis() - lastServoPulse >= 20) {
+    lastServoPulse = millis();
     digitalWrite(GRIPPER, HIGH);
     delayMicroseconds(servoPulseWidth);
     digitalWrite(GRIPPER, LOW);
@@ -123,8 +286,6 @@ void clawOpen(bool open) {
   if (open) {
     servoPulseWidth = 1500;
   } else {
-    servoPulseWidth = 1000;
+    servoPulseWidth = 1100;
   }
-
-  updateServo();
 }
