@@ -1,0 +1,208 @@
+long duration;
+int distance;
+const int RIGHT_BACKWARD = 10;
+const int RIGHT_FORWARD = 9;
+const int ULTRA_SONIC_TRIG = 8;
+const int ULTRA_SONIC_ECHO = 7;
+const int LEFT_BACKWARD = 6;
+const int LEFT_FORWARD = 5;
+const int RIGHT_IN = 2;
+const int LEFT_IN = 3;
+const int GRIPPER = 11;
+const byte WHEEL_SPEED = 255;
+int RightPulses = 0;
+int LastInterruptRight = 0;
+int LeftPulses = 0;
+int LastInterruptLeft = 0;
+int RightWheel;
+int LeftWheel;
+bool firstStop = true;
+
+unsigned long lastServoPulse = 0;
+int servoPulseWidth = 1100;
+
+void setup() {
+  pinMode(ULTRA_SONIC_TRIG, OUTPUT);
+  pinMode(ULTRA_SONIC_ECHO, INPUT);
+  pinMode(RIGHT_BACKWARD, OUTPUT);
+  pinMode(RIGHT_FORWARD, OUTPUT);
+  pinMode(LEFT_BACKWARD, OUTPUT);
+  pinMode(LEFT_FORWARD, OUTPUT);
+  pinMode(GRIPPER, OUTPUT);
+  pinMode(RIGHT_IN, INPUT);
+  pinMode(LEFT_IN, INPUT);
+  Serial.begin(9600);
+
+  //initiates pins 2 and 3 to activate functions when going from LOW to HIGH
+  attachInterrupt(digitalPinToInterrupt(RIGHT_IN), countPulseRightWheel, RISING);
+  attachInterrupt(digitalPinToInterrupt(LEFT_IN), countPulseLeftWheel, RISING);
+  
+  clawOpen(true);
+}
+
+void loop() {
+  unsigned long timer;
+
+  timer = millis();
+  while (millis() - timer < 1000) {
+    clawOpen(true);
+  }
+
+  timer = millis();
+  while (millis() - timer < 1000) {
+    clawOpen(false);
+  }
+
+  timer = millis();
+  while (millis() - timer < 1000) {
+    clawOpen(true);
+  }
+
+  drive(25, 25);
+  drive(25, 25);
+
+  while(true){
+    clawOpen(false);
+  }
+}
+
+//Function called when right wheel rotates 1/20th of a rotation
+void countPulseRightWheel()
+{
+  if(millis() > LastInterruptRight)
+  {
+    RightPulses++;
+    LastInterruptRight = millis() + 20;
+  }
+}
+
+//Function called when left wheel rotates 1/20th of a rotation
+void countPulseLeftWheel()
+{
+  if(millis() > LastInterruptLeft)
+  {
+    LeftPulses++;
+    LastInterruptLeft = millis() + 20;
+  }
+}
+
+void drive(int RightDistance, int LeftDistance) { 
+  RightPulses = 0;
+  LeftPulses = 0;
+  
+  //Handles giong backward 
+  if(RightDistance > 0) {
+    RightWheel = RIGHT_FORWARD;
+  } else {
+    RightWheel = RIGHT_BACKWARD;
+  }
+  if(LeftDistance > 0) {
+    LeftWheel = LEFT_FORWARD;
+  } else {
+    LeftWheel = LEFT_BACKWARD;
+  }
+
+  RightDistance = abs(RightDistance);
+  LeftDistance = abs(LeftDistance);
+
+  // keeps driving until the set distance is reached for each wheel
+  while(RightPulses < RightDistance || LeftPulses < LeftDistance)
+  {   
+    analogWrite(RightWheel, WHEEL_SPEED);
+    analogWrite(LeftWheel, WHEEL_SPEED);
+ 
+    // Compensates if one wheel is going faster than the other
+    if(LeftPulses > RightPulses)
+    {
+      analogWrite(RightWheel, WHEEL_SPEED / 1.5);
+    }
+    if(RightPulses > LeftPulses)
+    {
+      analogWrite(LeftWheel, WHEEL_SPEED / 1.5);
+    }
+
+    // Stops wheel if destination is reached
+    if(RightPulses >= RightDistance)
+    {
+      analogWrite(RightWheel, 0);
+    }
+    if(LeftPulses >= LeftDistance)
+    {  
+      analogWrite(LeftWheel, 0);
+    }
+
+    if(ultraSonicSensor() < 7 && firstStop){
+      analogWrite(RightWheel, 0);
+      analogWrite(LeftWheel, 0);
+
+      unsigned long timer = millis();
+      while (millis() - timer < 1000) {
+        clawOpen(false);
+      }
+
+      firstStop = false;
+      break;
+    }
+
+    clawOpen(firstStop);
+  }
+
+  analogWrite(RightWheel, 0);
+  analogWrite(LeftWheel, 0);
+  RightPulses = 0;
+  LeftPulses = 0;
+}
+
+int ultraSonicSensor()
+{
+    static unsigned long lastActive = 0;
+
+    if(millis() < lastActive)
+    {
+      return distance;
+    }
+    digitalWrite(ULTRA_SONIC_TRIG, LOW);
+    delayMicroseconds(2);
+
+    digitalWrite(ULTRA_SONIC_TRIG, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(ULTRA_SONIC_TRIG, LOW);
+
+    duration = pulseIn(ULTRA_SONIC_ECHO, HIGH);
+
+    distance = duration * 0.034 / 2;
+    lastActive = millis() + 500;
+    
+    if (distance != 0)
+    {
+      return distance;
+    } else {
+      return ultraSonicSensor();
+    }
+}
+
+void updateServo()
+{
+  if (micros() - lastServoPulse >= 20000)
+  {
+    lastServoPulse = micros();
+
+    digitalWrite(GRIPPER, HIGH);
+    delayMicroseconds(servoPulseWidth);
+    digitalWrite(GRIPPER, LOW);
+  }
+}
+
+void clawOpen(bool open)
+{
+  if (open)
+  {
+    servoPulseWidth = 1500;
+    updateServo();
+  }
+  else
+  {
+    servoPulseWidth = 1000;
+    updateServo();
+  }
+}
