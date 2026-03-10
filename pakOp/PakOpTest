@@ -131,7 +131,7 @@ void drive(int RightDistance, int LeftDistance) {
       analogWrite(LeftWheel, 0);
     }
 
-    if(ultraSonicSensor() < 7 && firstStop){
+    if(firstStop && ultraSonicSensor() < 7){
       analogWrite(RightWheel, 0);
       analogWrite(LeftWheel, 0);
 
