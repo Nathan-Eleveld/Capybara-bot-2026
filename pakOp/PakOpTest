@@ -17,13 +17,13 @@ const byte SEARCH_SPEED = 255;
 const int DETECT_DISTANCE = 7;
 const int PULSES_25_CM = 50;
 
-volatile int RightPulses = 0;
-volatile int LastInterruptRight = 0;
-volatile int LeftPulses = 0;
-volatile int LastInterruptLeft = 0;
+volatile int rightPulses = 0;
+volatile int lastInterruptRight = 0;
+volatile int leftPulses = 0;
+volatile int lastInterruptLeft = 0;
 
-int RightWheel;
-int LeftWheel;
+int rightWheel;
+int leftWheel;
 
 unsigned long lastServoPulse = 0;
 int servoPulseWidth = 1500;
@@ -32,6 +32,7 @@ int stepNumber = 0;
 unsigned long stepStartTime = 0;
 bool stepStarted = false;
 
+// Zet pins goed klaar, zet outputs eerst LOW zodat motors/servo niet direct starten.
 void setup() {
   pinMode(ULTRA_SONIC_TRIG, OUTPUT);
   pinMode(ULTRA_SONIC_ECHO, INPUT);
@@ -43,6 +44,13 @@ void setup() {
   pinMode(RIGHT_IN, INPUT);
   pinMode(LEFT_IN, INPUT);
 
+  digitalWrite(ULTRA_SONIC_TRIG, LOW);
+  digitalWrite(RIGHT_BACKWARD, LOW);
+  digitalWrite(RIGHT_FORWARD, LOW);
+  digitalWrite(LEFT_BACKWARD, LOW);
+  digitalWrite(LEFT_FORWARD, LOW);
+  digitalWrite(GRIPPER, LOW);
+
   Serial.begin(9600);
 
   attachInterrupt(digitalPinToInterrupt(RIGHT_IN), countPulseRightWheel, RISING);
@@ -51,25 +59,29 @@ void setup() {
   clawOpen(true);
 }
 
+// Houd servo actief en voert steeds de volgende stap uit.
 void loop() {
   updateServo();
   runSteps();
 }
 
+// Telt rechter encoderpulsen. +20 ms blokkeert dubbele metingen door storing/bounce.
 void countPulseRightWheel() {
-  if (millis() > LastInterruptRight) {
-    RightPulses++;
-    LastInterruptRight = millis() + 20;
+  if (millis() > lastInterruptRight) {
+    rightPulses++;
+    lastInterruptRight = millis() + 20;
   }
 }
 
+// Telt linker encoderpulsen. +20 ms blokkeert dubbele metingen door storing/bounce.
 void countPulseLeftWheel() {
-  if (millis() > LastInterruptLeft) {
-    LeftPulses++;
-    LastInterruptLeft = millis() + 20;
+  if (millis() > lastInterruptLeft) {
+    leftPulses++;
+    lastInterruptLeft = millis() + 20;
   }
 }
 
+// Stuurt het hele stappenplan aan: grijper openen/sluiten en rijden per fase.
 void runSteps() {
   switch (stepNumber) {
     case 0:
@@ -131,6 +143,7 @@ void runSteps() {
   }
 }
 
+// Start een stap maar één keer en bewaart de begintijd voor timing.
 void startStep() {
   if (!stepStarted) {
     stepStarted = true;
@@ -138,22 +151,24 @@ void startStep() {
   }
 }
 
+// Gaat naar de volgende stap en reset de startstatus van de huidige stap.
 void nextStep() {
   stepNumber++;
   stepStarted = false;
 }
 
-bool driveUntilConeOrDistance(int RightDistance, int LeftDistance) {
+// Rijdt vooruit tot een object op 7 cm is gevonden of tot 50 pulsen ≈ 25 cm zijn gereden.
+bool driveUntilConeOrDistance(int rightDistance, int leftDistance) {
   static bool started = false;
 
   if (!started) {
-    RightPulses = 0;
-    LeftPulses = 0;
+    rightPulses = 0;
+    leftPulses = 0;
     started = true;
   }
 
-  RightWheel = RIGHT_FORWARD;
-  LeftWheel = LEFT_FORWARD;
+  rightWheel = RIGHT_FORWARD;
+  leftWheel = LEFT_FORWARD;
 
   int currentDistance = ultraSonicSensor();
   Serial.println(currentDistance);
@@ -161,85 +176,87 @@ bool driveUntilConeOrDistance(int RightDistance, int LeftDistance) {
   if (currentDistance <= DETECT_DISTANCE) {
     stopMotors();
     started = false;
-    RightPulses = 0;
-    LeftPulses = 0;
+    rightPulses = 0;
+    leftPulses = 0;
     return true;
   }
 
-  if (RightPulses < RightDistance) {
-    analogWrite(RightWheel, SEARCH_SPEED);
+  if (rightPulses < rightDistance) {
+    analogWrite(rightWheel, SEARCH_SPEED);
   } else {
-    analogWrite(RightWheel, 0);
+    analogWrite(rightWheel, 0);
   }
 
-  if (LeftPulses < LeftDistance) {
-    analogWrite(LeftWheel, SEARCH_SPEED);
+  if (leftPulses < leftDistance) {
+    analogWrite(leftWheel, SEARCH_SPEED);
   } else {
-    analogWrite(LeftWheel, 0);
+    analogWrite(leftWheel, 0);
   }
 
-  if (LeftPulses > RightPulses && RightPulses < RightDistance) {
-    analogWrite(RightWheel, SEARCH_SPEED / 2);
+  if (leftPulses > rightPulses && rightPulses < rightDistance) {
+    analogWrite(rightWheel, SEARCH_SPEED / 2);
   }
 
-  if (RightPulses > LeftPulses && LeftPulses < LeftDistance) {
-    analogWrite(LeftWheel, SEARCH_SPEED / 2);
+  if (rightPulses > leftPulses && leftPulses < leftDistance) {
+    analogWrite(leftWheel, SEARCH_SPEED / 2);
   }
 
-  if (RightPulses >= RightDistance && LeftPulses >= LeftDistance) {
+  if (rightPulses >= rightDistance && leftPulses >= leftDistance) {
     stopMotors();
     started = false;
-    RightPulses = 0;
-    LeftPulses = 0;
+    rightPulses = 0;
+    leftPulses = 0;
     return true;
   }
 
   return false;
 }
 
-bool driveFixedDistance(int RightDistance, int LeftDistance) {
+// Rijdt een vaste afstand met encoders. 50 pulsen is hier ingesteld als ongeveer 25 cm.
+bool driveFixedDistance(int rightDistance, int leftDistance) {
   static bool started = false;
 
   if (!started) {
-    RightPulses = 0;
-    LeftPulses = 0;
+    rightPulses = 0;
+    leftPulses = 0;
     started = true;
   }
 
-  RightWheel = RIGHT_FORWARD;
-  LeftWheel = LEFT_FORWARD;
+  rightWheel = RIGHT_FORWARD;
+  leftWheel = LEFT_FORWARD;
 
-  if (RightPulses < RightDistance) {
-    analogWrite(RightWheel, WHEEL_SPEED);
+  if (rightPulses < rightDistance) {
+    analogWrite(rightWheel, WHEEL_SPEED);
   } else {
-    analogWrite(RightWheel, 0);
+    analogWrite(rightWheel, 0);
   }
 
-  if (LeftPulses < LeftDistance) {
-    analogWrite(LeftWheel, WHEEL_SPEED);
+  if (leftPulses < leftDistance) {
+    analogWrite(leftWheel, WHEEL_SPEED);
   } else {
-    analogWrite(LeftWheel, 0);
+    analogWrite(leftWheel, 0);
   }
 
-  if (LeftPulses > RightPulses && RightPulses < RightDistance) {
-    analogWrite(RightWheel, WHEEL_SPEED / 2);
+  if (leftPulses > rightPulses && rightPulses < rightDistance) {
+    analogWrite(rightWheel, WHEEL_SPEED / 2);
   }
 
-  if (RightPulses > LeftPulses && LeftPulses < LeftDistance) {
-    analogWrite(LeftWheel, WHEEL_SPEED / 2);
+  if (rightPulses > leftPulses && leftPulses < leftDistance) {
+    analogWrite(leftWheel, WHEEL_SPEED / 2);
   }
 
-  if (RightPulses >= RightDistance && LeftPulses >= LeftDistance) {
+  if (rightPulses >= rightDistance && leftPulses >= leftDistance) {
     stopMotors();
     started = false;
-    RightPulses = 0;
-    LeftPulses = 0;
+    rightPulses = 0;
+    leftPulses = 0;
     return true;
   }
 
   return false;
 }
 
+// Zet alle motoraansturing uit zodat de robot direct stopt.
 void stopMotors() {
   analogWrite(RIGHT_FORWARD, 0);
   analogWrite(RIGHT_BACKWARD, 0);
@@ -247,6 +264,7 @@ void stopMotors() {
   analogWrite(LEFT_BACKWARD, 0);
 }
 
+// Meet afstand met ultrasoon sensor. Timeout 25000 voorkomt te lang wachten, 100 ms beperkt spam. 999 is voor geen echo / buiten bereik
 int ultraSonicSensor() {
   static unsigned long lastActive = 0;
 
@@ -273,6 +291,7 @@ int ultraSonicSensor() {
   return distance;
 }
 
+// Houdt de servo actief met elke 20 ms een puls.
 void updateServo() {
   if (millis() - lastServoPulse >= 20) {
     lastServoPulse = millis();
@@ -282,6 +301,7 @@ void updateServo() {
   }
 }
 
+// Zet servo op open of dicht. 1500 is neutraal/open en 1100 trekt verder dicht.
 void clawOpen(bool open) {
   if (open) {
     servoPulseWidth = 1500;
