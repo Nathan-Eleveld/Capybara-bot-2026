@@ -1,6 +1,5 @@
 long duration;
 int distance;
-
 const int RIGHT_BACKWARD = 10;
 const int RIGHT_FORWARD = 9;
 const int ULTRA_SONIC_TRIG = 8;
@@ -12,16 +11,14 @@ const int LEFT_IN = 3;
 const int GRIPPER = 11;
 
 const byte WHEEL_SPEED = 255;
-const byte SEARCH_SPEED = 255;
 
 const int DETECT_DISTANCE = 7;
 const int PULSES_25_CM = 50;
 
-volatile int rightPulses = 0;
-volatile int lastInterruptRight = 0;
-volatile int leftPulses = 0;
-volatile int lastInterruptLeft = 0;
-
+int rightPulses = 0;
+int lastInterruptRight = 0;
+int leftPulses = 0;
+int lastInterruptLeft = 0;
 int rightWheel;
 int leftWheel;
 
@@ -182,23 +179,23 @@ bool driveUntilConeOrDistance(int rightDistance, int leftDistance) {
   }
 
   if (rightPulses < rightDistance) {
-    analogWrite(rightWheel, SEARCH_SPEED);
+    analogWrite(rightWheel, WHEEL_SPEED);
   } else {
     analogWrite(rightWheel, 0);
   }
 
   if (leftPulses < leftDistance) {
-    analogWrite(leftWheel, SEARCH_SPEED);
+    analogWrite(leftWheel, WHEEL_SPEED);
   } else {
     analogWrite(leftWheel, 0);
   }
 
   if (leftPulses > rightPulses && rightPulses < rightDistance) {
-    analogWrite(rightWheel, SEARCH_SPEED / 2);
+    analogWrite(rightWheel, WHEEL_SPEED / 2);
   }
 
   if (rightPulses > leftPulses && leftPulses < leftDistance) {
-    analogWrite(leftWheel, SEARCH_SPEED / 2);
+    analogWrite(leftWheel, WHEEL_SPEED / 2);
   }
 
   if (rightPulses >= rightDistance && leftPulses >= leftDistance) {
