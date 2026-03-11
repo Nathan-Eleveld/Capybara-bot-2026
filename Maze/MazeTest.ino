@@ -18,6 +18,7 @@ const int LEFT_MIN_TARGET = 6;
 const int LEFT_MAX_TARGET = 10;
 const int FRONT_BLOCKED   = 18;
 const int LEFT_OPENING    = 12;
+const int LEFT_TURN_OPEN  = 16;   // vanaf hier echt een linkerbocht/opening
 
 // Snelheden
 const int BASE_SPEED      = 150;
@@ -25,11 +26,12 @@ const int TURN_SPEED      = 165;
 const int CORRECT_SPEED   = 145;
 const int STRONG_SPEED    = 175;
 
-// Tijden (afhankelijk van chassis aanpassen)
-const int TURN_90_TIME    = 390;
-const int TURN_180_TIME   = 780;
-const int BACKUP_TIME     = 220;
-const int STOP_TIME       = 80;
+// Tijden
+const int TURN_90_TIME      = 390;
+const int TURN_180_TIME     = 780;
+const int BACKUP_TIME       = 320;   // was 220
+const int BACKUP_LONG_TIME  = 480;   // extra langere achteruit
+const int STOP_TIME         = 80;
 
 // Sensor timeout
 const unsigned long PULSE_TIMEOUT = 25000UL;
@@ -73,13 +75,22 @@ void loop() {
     lastDebug = millis();
   }
 
-  // 1. Als vooruit vrij is: altijd vooruit rijden
+  // 1. Linkerbocht heeft prioriteit als die echt open is
+  // Ook als voor vrij is
+  if (leftDistance > LEFT_TURN_OPEN && frontDistance > FRONT_BLOCKED) {
+    stopBrief();
+    backupShort();
+    turnLeft90();
+    return;
+  }
+
+  // 2. Als vooruit vrij is: vooruit en linkermuur volgen
   if (frontDistance > FRONT_BLOCKED) {
     followLeftWall(leftDistance);
     return;
   }
 
-  // 2. Voor geblokkeerd: eerst links proberen als daar opening is
+  // 3. Voor geblokkeerd: eerst links proberen
   stopBrief();
 
   if (leftDistance > LEFT_OPENING) {
@@ -88,8 +99,7 @@ void loop() {
     return;
   }
 
-  // 3. Voor dicht en links dicht:
-  // probeer rechts door een kwartslag rechts te draaien
+  // 4. Voor dicht en links dicht: probeer rechts
   backupShort();
   turnRight90();
   delay(60);
@@ -99,7 +109,7 @@ void loop() {
     return;
   }
 
-  // 4. Nog steeds vast: nog een kwartslag rechts = 180 vanaf originele richting
+  // 5. Nog steeds vast: nog een kwartslag rechts
   backupShort();
   turnRight90();
   delay(60);
@@ -109,7 +119,7 @@ void loop() {
     return;
   }
 
-  // 5. Echt vast: nog stukje achteruit en opnieuw 180 proberen
+  // 6. Echt vast: langer achteruit en 180 draaien
   backupLong();
   turnAround180();
   delay(60);
@@ -134,7 +144,6 @@ int singleReadDistanceCm(int trigPin, int echoPin) {
 
   unsigned long duration = pulseIn(echoPin, HIGH, PULSE_TIMEOUT);
 
-  // Geen echo = behandel als ver/open
   if (duration == 0) {
     return 250;
   }
@@ -153,30 +162,30 @@ int median3(int a, int b, int c) {
   return c;
 }
 
-// Houd de linkermuur tussen 12 en 15 cm
+// Houd de linkermuur op afstand
 void followLeftWall(int leftDistance) {
-  // Linkermuur kwijt? rustig links zoeken maar wel vooruit
+  // Linkermuur kwijt? iets naar links zoeken
   if (leftDistance > LEFT_OPENING) {
     drive(CORRECT_SPEED, STRONG_SPEED);
     delay(40);
     return;
   }
 
-  // Te dicht op de linkermuur -> iets naar rechts sturen
+  // Te dicht op muur -> naar rechts bijsturen
   if (leftDistance < LEFT_MIN_TARGET) {
     drive(STRONG_SPEED, CORRECT_SPEED);
     delay(35);
     return;
   }
 
-  // Te ver van de linkermuur -> iets naar links sturen
+  // Te ver van muur -> naar links bijsturen
   if (leftDistance > LEFT_MAX_TARGET) {
     drive(CORRECT_SPEED, STRONG_SPEED);
     delay(35);
     return;
   }
 
-  // Mooie afstand -> rechtdoor
+  // Goede afstand
   drive(BASE_SPEED, BASE_SPEED);
   delay(35);
 }
@@ -243,7 +252,7 @@ void backupShort() {
 
 void backupLong() {
   driveBackward(155, 155);
-  delay(BACKUP_TIME + 120);
+  delay(BACKUP_LONG_TIME);
   stopBrief();
 }
 
