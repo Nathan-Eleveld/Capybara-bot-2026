@@ -16,16 +16,19 @@ const int RIGHT_IN = 2;
 const int LEFT_IN = 3;
 const int GRIPPER = 11;
 
-const int BASE_SPEED = 170;
-const int TURN_SPEED = 180;
+const int BASE_SPEED = 160;
+const int TURN_SPEED = 170;
+const int BACK_SPEED = 140;
 
-const int FRONT_STOP_DISTANCE = 18;
-const int SIDE_WALL_DISTANCE = 25;
-const int DESIRED_LEFT_DISTANCE = 12;
-const int LEFT_TOLERANCE = 3;
+const int FRONT_BLOCKED_DISTANCE = 14;
+const int SIDE_WALL_DISTANCE = 22;
 
-unsigned long lastDebugTime = 0;
-String currentAction = "STOP";
+const int DESIRED_LEFT_DISTANCE = 10;
+const int LEFT_MARGIN = 2;
+
+unsigned long lastDebug = 0;
+unsigned long turnUntil = 0;
+String action = "STOP";
 
 void setup() {
   Serial.begin(9600);
@@ -52,45 +55,57 @@ void setup() {
 }
 
 void loop() {
-  int frontDistance = getDistance(ULTRA_SONIC_TRIG_FRONT, ULTRA_SONIC_ECHO_FRONT);
-  int leftDistance = getDistance(ULTRA_SONIC_TRIG_LEFT, ULTRA_SONIC_ECHO_LEFT);
-  int rightDistance = getDistance(ULTRA_SONIC_TRIG_RIGHT, ULTRA_SONIC_ECHO_RIGHT);
+  int frontDistance = getStableDistance(ULTRA_SONIC_TRIG_FRONT, ULTRA_SONIC_ECHO_FRONT);
+  int leftDistance = getStableDistance(ULTRA_SONIC_TRIG_LEFT, ULTRA_SONIC_ECHO_LEFT);
+  int rightDistance = getStableDistance(ULTRA_SONIC_TRIG_RIGHT, ULTRA_SONIC_ECHO_RIGHT);
 
-  bool frontBlocked = frontDistance > 0 && frontDistance < FRONT_STOP_DISTANCE;
-  bool leftWall = leftDistance > 0 && leftDistance < SIDE_WALL_DISTANCE;
-  bool rightWall = rightDistance > 0 && rightDistance < SIDE_WALL_DISTANCE;
+  bool frontBlocked = frontDistance <= FRONT_BLOCKED_DISTANCE;
+  bool leftWall = leftDistance <= SIDE_WALL_DISTANCE;
+  bool rightWall = rightDistance <= SIDE_WALL_DISTANCE;
+
+  if (millis() < turnUntil) {
+    debugSensors(frontDistance, leftDistance, rightDistance, action);
+    return;
+  }
 
   if (frontBlocked) {
     stopMotors();
-    delay(80);
+    delay(50);
 
-    frontDistance = getDistance(ULTRA_SONIC_TRIG_FRONT, ULTRA_SONIC_ECHO_FRONT);
-    leftDistance = getDistance(ULTRA_SONIC_TRIG_LEFT, ULTRA_SONIC_ECHO_LEFT);
-    rightDistance = getDistance(ULTRA_SONIC_TRIG_RIGHT, ULTRA_SONIC_ECHO_RIGHT);
+    frontDistance = getStableDistance(ULTRA_SONIC_TRIG_FRONT, ULTRA_SONIC_ECHO_FRONT);
+    leftDistance = getStableDistance(ULTRA_SONIC_TRIG_LEFT, ULTRA_SONIC_ECHO_LEFT);
+    rightDistance = getStableDistance(ULTRA_SONIC_TRIG_RIGHT, ULTRA_SONIC_ECHO_RIGHT);
 
-    frontBlocked = frontDistance > 0 && frontDistance < FRONT_STOP_DISTANCE;
-    leftWall = leftDistance > 0 && leftDistance < SIDE_WALL_DISTANCE;
-    rightWall = rightDistance > 0 && rightDistance < SIDE_WALL_DISTANCE;
+    frontBlocked = frontDistance <= FRONT_BLOCKED_DISTANCE;
+    leftWall = leftDistance <= SIDE_WALL_DISTANCE;
+    rightWall = rightDistance <= SIDE_WALL_DISTANCE;
 
     if (frontBlocked) {
+      backUpAndCorrect();
+
       if (leftWall) {
-        currentAction = "RECHTS DRAAIEN";
+        action = "BACK + TURN RIGHT";
         turnRight();
+        turnUntil = millis() + 250;
       } else {
-        currentAction = "LINKS DRAAIEN";
+        action = "BACK + TURN LEFT";
         turnLeft();
+        turnUntil = millis() + 250;
       }
+    } else {
+      action = "FORWARD";
+      driveForward(BASE_SPEED, BASE_SPEED);
     }
   } else {
     if (leftWall) {
       followLeftWall(leftDistance);
     } else {
-      currentAction = "VOORUIT GEEN LINKERMUUR";
+      action = "FORWARD OPEN LEFT";
       driveForward(BASE_SPEED, BASE_SPEED);
     }
   }
 
-  debugSensors(frontDistance, leftDistance, rightDistance, frontBlocked, leftWall, rightWall);
+  debugSensors(frontDistance, leftDistance, rightDistance, action);
 }
 
 int getDistance(int trigPin, int echoPin) {
@@ -102,37 +117,56 @@ int getDistance(int trigPin, int echoPin) {
 
   long duration = pulseIn(echoPin, HIGH, 25000);
 
-  if (duration == 0) {
-    return 999;
-  }
+  if (duration == 0) return 250;
 
   int distance = duration * 0.034 / 2;
 
-  if (distance <= 0 || distance > 400) {
-    return 999;
-  }
+  if (distance < 2 || distance > 250) return 250;
 
   return distance;
 }
 
-// Houdt de linker muur op ongeveer dezelfde afstand
-void followLeftWall(int leftDistance) {
-  if (leftDistance == 999) {
-    currentAction = "VOORUIT SENSOR LINKS GEEN DATA";
-    driveForward(BASE_SPEED, BASE_SPEED);
-    return;
+int getStableDistance(int trigPin, int echoPin) {
+  int a = getDistance(trigPin, echoPin);
+  delay(5);
+  int b = getDistance(trigPin, echoPin);
+  delay(5);
+  int c = getDistance(trigPin, echoPin);
+
+  int values[3] = {a, b, c};
+
+  for (int i = 0; i < 2; i++) {
+    for (int j = i + 1; j < 3; j++) {
+      if (values[j] < values[i]) {
+        int temp = values[i];
+        values[i] = values[j];
+        values[j] = temp;
+      }
+    }
   }
 
-  if (leftDistance < DESIRED_LEFT_DISTANCE - LEFT_TOLERANCE) {
-    currentAction = "BIJSTUREN RECHTS";
-    driveForward(BASE_SPEED - 45, BASE_SPEED + 35);
-  } 
-  else if (leftDistance > DESIRED_LEFT_DISTANCE + LEFT_TOLERANCE) {
-    currentAction = "BIJSTUREN LINKS";
-    driveForward(BASE_SPEED + 35, BASE_SPEED - 45);
-  } 
-  else {
-    currentAction = "NETJES VOORUIT";
+  return values[1];
+}
+
+// Kort achteruit zodat hij ruimte maakt voor de bocht
+void backUpAndCorrect() {
+  action = "BACK UP";
+  driveBackward(BACK_SPEED, BACK_SPEED);
+  delay(180);
+  stopMotors();
+  delay(60);
+}
+
+// Houdt de linkermuur op ongeveer dezelfde afstand
+void followLeftWall(int leftDistance) {
+  if (leftDistance < DESIRED_LEFT_DISTANCE - LEFT_MARGIN) {
+    action = "ADJUST RIGHT";
+    driveForward(BASE_SPEED - 45, BASE_SPEED + 25);
+  } else if (leftDistance > DESIRED_LEFT_DISTANCE + LEFT_MARGIN) {
+    action = "ADJUST LEFT";
+    driveForward(BASE_SPEED + 25, BASE_SPEED - 45);
+  } else {
+    action = "CENTER FORWARD";
     driveForward(BASE_SPEED, BASE_SPEED);
   }
 }
@@ -173,9 +207,9 @@ void turnRight() {
   analogWrite(RIGHT_FORWARD, 0);
   analogWrite(RIGHT_BACKWARD, TURN_SPEED);
 
-  delay(350);
+  delay(240);
   stopMotors();
-  delay(80);
+  delay(60);
 }
 
 void turnLeft() {
@@ -185,27 +219,21 @@ void turnLeft() {
   analogWrite(RIGHT_FORWARD, TURN_SPEED);
   analogWrite(RIGHT_BACKWARD, 0);
 
-  delay(350);
+  delay(240);
   stopMotors();
-  delay(80);
+  delay(60);
 }
 
-void debugSensors(int frontDistance, int leftDistance, int rightDistance, bool frontBlocked, bool leftWall, bool rightWall) {
-  if (millis() - lastDebugTime < 250) return;
-  lastDebugTime = millis();
+void debugSensors(int frontDistance, int leftDistance, int rightDistance, String currentAction) {
+  if (millis() - lastDebug < 200) return;
+  lastDebug = millis();
 
-  Serial.print("VOOR: ");
+  Serial.print("Front: ");
   Serial.print(frontDistance);
-  Serial.print(" cm | LINKS: ");
+  Serial.print(" cm | Left: ");
   Serial.print(leftDistance);
-  Serial.print(" cm | RECHTS: ");
+  Serial.print(" cm | Right: ");
   Serial.print(rightDistance);
-  Serial.print(" cm | frontBlocked: ");
-  Serial.print(frontBlocked);
-  Serial.print(" | leftWall: ");
-  Serial.print(leftWall);
-  Serial.print(" | rightWall: ");
-  Serial.print(rightWall);
-  Serial.print(" | ACTIE: ");
+  Serial.print(" cm | Action: ");
   Serial.println(currentAction);
 }
