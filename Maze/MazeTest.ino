@@ -1,5 +1,7 @@
 const int RIGHT_BACKWARD = 10;
 const int RIGHT_FORWARD = 9;
+const int LEFT_BACKWARD = 6;
+const int LEFT_FORWARD = 5;
 
 const int ULTRA_SONIC_TRIG_FRONT = 8;
 const int ULTRA_SONIC_ECHO_FRONT = 7;
@@ -7,22 +9,28 @@ const int ULTRA_SONIC_ECHO_FRONT = 7;
 const int ULTRA_SONIC_TRIG_LEFT = 4;
 const int ULTRA_SONIC_ECHO_LEFT = 13;
 
-const int LEFT_BACKWARD = 6;
-const int LEFT_FORWARD = 5;
+const int ULTRA_SONIC_TRIG_RIGHT = 12;
+const int ULTRA_SONIC_ECHO_RIGHT = A0;
 
 const int RIGHT_IN = 2;
 const int LEFT_IN = 3;
 const int GRIPPER = 11;
 
-const int FRONT_WALL_DISTANCE = 14;
-const int LEFT_TARGET_DISTANCE = 12;
-const int LEFT_TOO_CLOSE = 8;
-const int LEFT_WALL_MAX = 18;
+const int FRONT_BLOCKED_DISTANCE = 14;
+const int SIDE_WALL_MAX_DISTANCE = 25;
 
-const int BASE_SPEED = 160;
-const int SMALL_CORRECTION = 30;
+const int TARGET_LEFT_DISTANCE = 12;
+const int TARGET_RIGHT_DISTANCE = 12;
+const int TARGET_CENTER_DISTANCE = 12;
+
+const int BASE_SPEED = 155;
+const int SMALL_CORRECTION = 25;
+const int MEDIUM_CORRECTION = 45;
 const int STRONG_CORRECTION = 65;
+
 const int TURN_SPEED = 170;
+const int TURN_STEP_DELAY = 35;
+const int MAX_TURN_TIME = 1400;
 
 void setup() {
   pinMode(RIGHT_BACKWARD, OUTPUT);
@@ -36,6 +44,9 @@ void setup() {
   pinMode(ULTRA_SONIC_TRIG_LEFT, OUTPUT);
   pinMode(ULTRA_SONIC_ECHO_LEFT, INPUT);
 
+  pinMode(ULTRA_SONIC_TRIG_RIGHT, OUTPUT);
+  pinMode(ULTRA_SONIC_ECHO_RIGHT, INPUT);
+
   pinMode(RIGHT_IN, INPUT);
   pinMode(LEFT_IN, INPUT);
   pinMode(GRIPPER, OUTPUT);
@@ -46,22 +57,31 @@ void setup() {
 void loop() {
   int frontDistance = getStableDistance(ULTRA_SONIC_TRIG_FRONT, ULTRA_SONIC_ECHO_FRONT);
   int leftDistance = getStableDistance(ULTRA_SONIC_TRIG_LEFT, ULTRA_SONIC_ECHO_LEFT);
+  int rightDistance = getStableDistance(ULTRA_SONIC_TRIG_RIGHT, ULTRA_SONIC_ECHO_RIGHT);
+
+  bool frontOpen = frontDistance == 999 || frontDistance > FRONT_BLOCKED_DISTANCE;
+  bool leftWall = leftDistance != 999 && leftDistance <= SIDE_WALL_MAX_DISTANCE;
+  bool rightWall = rightDistance != 999 && rightDistance <= SIDE_WALL_MAX_DISTANCE;
 
   Serial.print("Front: ");
   Serial.print(frontDistance);
   Serial.print("  Left: ");
-  Serial.println(leftDistance);
+  Serial.print(leftDistance);
+  Serial.print("  Right: ");
+  Serial.println(rightDistance);
 
-  if (frontDistance == 999 || frontDistance > FRONT_WALL_DISTANCE) {
-    moveWithLeftWallPriority(leftDistance);
+  if (frontOpen) {
+    moveForwardWithWallControl(leftDistance, rightDistance, leftWall, rightWall);
   } else {
     stopMotors();
     delay(60);
 
-    if (leftDistance != 999 && leftDistance <= LEFT_WALL_MAX) {
-      turnRightUntilFrontFree();
+    if (!leftWall) {
+      turnLeftUntilFrontOpen();
+    } else if (!rightWall) {
+      turnRightUntilFrontOpen();
     } else {
-      turnLeftUntilFrontFree();
+      turnAroundUntilFrontOpen();
     }
   }
 
@@ -98,8 +118,10 @@ int getStableDistance(int trigPin, int echoPin) {
 int measureDistance(int trigPin, int echoPin) {
   digitalWrite(trigPin, LOW);
   delayMicroseconds(5);
+
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
+
   digitalWrite(trigPin, LOW);
 
   long duration = pulseIn(echoPin, HIGH, 30000);
@@ -113,21 +135,75 @@ int measureDistance(int trigPin, int echoPin) {
   return distance;
 }
 
-void moveWithLeftWallPriority(int leftDistance) {
+void moveForwardWithWallControl(int leftDistance, int rightDistance, bool leftWall, bool rightWall) {
   int rightSpeed = BASE_SPEED;
   int leftSpeed = BASE_SPEED;
 
-  // Alleen corrigeren als links echt een muur is
-  if (leftDistance != 999 && leftDistance <= LEFT_WALL_MAX) {
-    if (leftDistance <= LEFT_TOO_CLOSE) {
+  if (leftWall && rightWall) {
+    int error = leftDistance - rightDistance;
+
+    if (error > 6) {
+      rightSpeed = BASE_SPEED - STRONG_CORRECTION;
+      leftSpeed = BASE_SPEED + STRONG_CORRECTION;
+    } else if (error > 3) {
+      rightSpeed = BASE_SPEED - MEDIUM_CORRECTION;
+      leftSpeed = BASE_SPEED + MEDIUM_CORRECTION;
+    } else if (error > 1) {
+      rightSpeed = BASE_SPEED - SMALL_CORRECTION;
+      leftSpeed = BASE_SPEED + SMALL_CORRECTION;
+    } else if (error < -6) {
       rightSpeed = BASE_SPEED + STRONG_CORRECTION;
       leftSpeed = BASE_SPEED - STRONG_CORRECTION;
-    } 
-    else if (leftDistance < LEFT_TARGET_DISTANCE) {
+    } else if (error < -3) {
+      rightSpeed = BASE_SPEED + MEDIUM_CORRECTION;
+      leftSpeed = BASE_SPEED - MEDIUM_CORRECTION;
+    } else if (error < -1) {
       rightSpeed = BASE_SPEED + SMALL_CORRECTION;
       leftSpeed = BASE_SPEED - SMALL_CORRECTION;
-    } 
-    else if (leftDistance > LEFT_TARGET_DISTANCE) {
+    }
+  } 
+  else if (leftWall) {
+    int error = leftDistance - TARGET_LEFT_DISTANCE;
+
+    if (error > 6) {
+      rightSpeed = BASE_SPEED - STRONG_CORRECTION;
+      leftSpeed = BASE_SPEED + STRONG_CORRECTION;
+    } else if (error > 3) {
+      rightSpeed = BASE_SPEED - MEDIUM_CORRECTION;
+      leftSpeed = BASE_SPEED + MEDIUM_CORRECTION;
+    } else if (error > 1) {
+      rightSpeed = BASE_SPEED - SMALL_CORRECTION;
+      leftSpeed = BASE_SPEED + SMALL_CORRECTION;
+    } else if (error < -6) {
+      rightSpeed = BASE_SPEED + STRONG_CORRECTION;
+      leftSpeed = BASE_SPEED - STRONG_CORRECTION;
+    } else if (error < -3) {
+      rightSpeed = BASE_SPEED + MEDIUM_CORRECTION;
+      leftSpeed = BASE_SPEED - MEDIUM_CORRECTION;
+    } else if (error < -1) {
+      rightSpeed = BASE_SPEED + SMALL_CORRECTION;
+      leftSpeed = BASE_SPEED - SMALL_CORRECTION;
+    }
+  } 
+  else if (rightWall) {
+    int error = rightDistance - TARGET_RIGHT_DISTANCE;
+
+    if (error > 6) {
+      rightSpeed = BASE_SPEED + STRONG_CORRECTION;
+      leftSpeed = BASE_SPEED - STRONG_CORRECTION;
+    } else if (error > 3) {
+      rightSpeed = BASE_SPEED + MEDIUM_CORRECTION;
+      leftSpeed = BASE_SPEED - MEDIUM_CORRECTION;
+    } else if (error > 1) {
+      rightSpeed = BASE_SPEED + SMALL_CORRECTION;
+      leftSpeed = BASE_SPEED - SMALL_CORRECTION;
+    } else if (error < -6) {
+      rightSpeed = BASE_SPEED - STRONG_CORRECTION;
+      leftSpeed = BASE_SPEED + STRONG_CORRECTION;
+    } else if (error < -3) {
+      rightSpeed = BASE_SPEED - MEDIUM_CORRECTION;
+      leftSpeed = BASE_SPEED + MEDIUM_CORRECTION;
+    } else if (error < -1) {
       rightSpeed = BASE_SPEED - SMALL_CORRECTION;
       leftSpeed = BASE_SPEED + SMALL_CORRECTION;
     }
@@ -139,6 +215,7 @@ void moveWithLeftWallPriority(int leftDistance) {
 void driveForward(int rightSpeed, int leftSpeed) {
   if (rightSpeed < 0) rightSpeed = 0;
   if (leftSpeed < 0) leftSpeed = 0;
+
   if (rightSpeed > 255) rightSpeed = 255;
   if (leftSpeed > 255) leftSpeed = 255;
 
@@ -169,15 +246,22 @@ void turnRight() {
   analogWrite(LEFT_BACKWARD, 0);
 }
 
-void turnLeftUntilFrontFree() {
+void turnAround() {
+  analogWrite(RIGHT_FORWARD, TURN_SPEED);
+  analogWrite(LEFT_FORWARD, 0);
+  analogWrite(RIGHT_BACKWARD, 0);
+  analogWrite(LEFT_BACKWARD, TURN_SPEED);
+}
+
+void turnLeftUntilFrontOpen() {
   unsigned long startTime = millis();
 
-  while (millis() - startTime < 1200) {
+  while (millis() - startTime < MAX_TURN_TIME) {
     turnLeft();
-    delay(30);
+    delay(TURN_STEP_DELAY);
 
     int frontDistance = measureDistance(ULTRA_SONIC_TRIG_FRONT, ULTRA_SONIC_ECHO_FRONT);
-    if (frontDistance == 999 || frontDistance > FRONT_WALL_DISTANCE) {
+    if (frontDistance == 999 || frontDistance > FRONT_BLOCKED_DISTANCE) {
       break;
     }
   }
@@ -186,15 +270,32 @@ void turnLeftUntilFrontFree() {
   delay(60);
 }
 
-void turnRightUntilFrontFree() {
+void turnRightUntilFrontOpen() {
   unsigned long startTime = millis();
 
-  while (millis() - startTime < 1200) {
+  while (millis() - startTime < MAX_TURN_TIME) {
     turnRight();
-    delay(30);
+    delay(TURN_STEP_DELAY);
 
     int frontDistance = measureDistance(ULTRA_SONIC_TRIG_FRONT, ULTRA_SONIC_ECHO_FRONT);
-    if (frontDistance == 999 || frontDistance > FRONT_WALL_DISTANCE) {
+    if (frontDistance == 999 || frontDistance > FRONT_BLOCKED_DISTANCE) {
+      break;
+    }
+  }
+
+  stopMotors();
+  delay(60);
+}
+
+void turnAroundUntilFrontOpen() {
+  unsigned long startTime = millis();
+
+  while (millis() - startTime < MAX_TURN_TIME + 600) {
+    turnAround();
+    delay(TURN_STEP_DELAY);
+
+    int frontDistance = measureDistance(ULTRA_SONIC_TRIG_FRONT, ULTRA_SONIC_ECHO_FRONT);
+    if (frontDistance == 999 || frontDistance > FRONT_BLOCKED_DISTANCE) {
       break;
     }
   }
