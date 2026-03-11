@@ -15,17 +15,14 @@ const int LEFT_IN = 3;
 const int GRIPPER = 11;
 
 const int FRONT_WALL_DISTANCE = 14;
-const int LEFT_WALL_DISTANCE = 12;
+const int LEFT_TARGET_DISTANCE = 12;
 const int LEFT_TOO_CLOSE = 8;
-const int LEFT_TOO_FAR = 18;
+const int LEFT_WALL_MAX = 18;
 
 const int BASE_SPEED = 160;
-const int STRONG_CORRECTION = 70;
-const int SMALL_CORRECTION = 35;
-
+const int SMALL_CORRECTION = 30;
+const int STRONG_CORRECTION = 65;
 const int TURN_SPEED = 170;
-const int TURN_TIME_LEFT = 420;
-const int TURN_TIME_RIGHT = 420;
 
 void setup() {
   pinMode(RIGHT_BACKWARD, OUTPUT);
@@ -55,31 +52,27 @@ void loop() {
   Serial.print("  Left: ");
   Serial.println(leftDistance);
 
-  // Vooruit heeft altijd prioriteit
   if (frontDistance == 999 || frontDistance > FRONT_WALL_DISTANCE) {
-    followLeftWall(leftDistance);
+    moveWithLeftWallPriority(leftDistance);
   } else {
     stopMotors();
     delay(60);
 
-    // Voor dicht + links dicht = rechts
-    if (leftDistance != 999 && leftDistance <= LEFT_TOO_FAR) {
-      turnRightUntilFrontIsFree();
-    } 
-    // Voor dicht + links open = links
-    else {
-      turnLeftUntilFrontIsFree();
+    if (leftDistance != 999 && leftDistance <= LEFT_WALL_MAX) {
+      turnRightUntilFrontFree();
+    } else {
+      turnLeftUntilFrontFree();
     }
   }
 
-  delay(25);
+  delay(20);
 }
 
 int getStableDistance(int trigPin, int echoPin) {
   int a = measureDistance(trigPin, echoPin);
-  delay(5);
+  delay(3);
   int b = measureDistance(trigPin, echoPin);
-  delay(5);
+  delay(3);
   int c = measureDistance(trigPin, echoPin);
 
   if (a == 999 && b == 999 && c == 999) return 999;
@@ -105,56 +98,39 @@ int getStableDistance(int trigPin, int echoPin) {
 int measureDistance(int trigPin, int echoPin) {
   digitalWrite(trigPin, LOW);
   delayMicroseconds(5);
-
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
-
   digitalWrite(trigPin, LOW);
 
   long duration = pulseIn(echoPin, HIGH, 30000);
 
-  if (duration == 0) {
-    return 999;
-  }
+  if (duration == 0) return 999;
 
   int distance = duration * 0.034 / 2;
 
-  if (distance < 2 || distance > 250) {
-    return 999;
-  }
+  if (distance < 2 || distance > 250) return 999;
 
   return distance;
 }
 
-// Houdt ongeveer dezelfde afstand tot de linkermuur
-void followLeftWall(int leftDistance) {
+void moveWithLeftWallPriority(int leftDistance) {
   int rightSpeed = BASE_SPEED;
   int leftSpeed = BASE_SPEED;
 
-  // Geen linkermuur gezien: gewoon vooruit
-  if (leftDistance == 999) {
-    driveForward(BASE_SPEED, BASE_SPEED);
-    return;
-  }
-
-  // Te dicht op linkermuur: stuur hard naar rechts
-  if (leftDistance <= LEFT_TOO_CLOSE) {
-    rightSpeed = BASE_SPEED + STRONG_CORRECTION;
-    leftSpeed = BASE_SPEED - STRONG_CORRECTION;
-  }
-  // Te ver van linkermuur: stuur naar links
-  else if (leftDistance >= LEFT_TOO_FAR) {
-    rightSpeed = BASE_SPEED - STRONG_CORRECTION;
-    leftSpeed = BASE_SPEED + STRONG_CORRECTION;
-  }
-  // Kleine correctie rond gewenste afstand
-  else if (leftDistance < LEFT_WALL_DISTANCE) {
-    rightSpeed = BASE_SPEED + SMALL_CORRECTION;
-    leftSpeed = BASE_SPEED - SMALL_CORRECTION;
-  }
-  else if (leftDistance > LEFT_WALL_DISTANCE) {
-    rightSpeed = BASE_SPEED - SMALL_CORRECTION;
-    leftSpeed = BASE_SPEED + SMALL_CORRECTION;
+  // Alleen corrigeren als links echt een muur is
+  if (leftDistance != 999 && leftDistance <= LEFT_WALL_MAX) {
+    if (leftDistance <= LEFT_TOO_CLOSE) {
+      rightSpeed = BASE_SPEED + STRONG_CORRECTION;
+      leftSpeed = BASE_SPEED - STRONG_CORRECTION;
+    } 
+    else if (leftDistance < LEFT_TARGET_DISTANCE) {
+      rightSpeed = BASE_SPEED + SMALL_CORRECTION;
+      leftSpeed = BASE_SPEED - SMALL_CORRECTION;
+    } 
+    else if (leftDistance > LEFT_TARGET_DISTANCE) {
+      rightSpeed = BASE_SPEED - SMALL_CORRECTION;
+      leftSpeed = BASE_SPEED + SMALL_CORRECTION;
+    }
   }
 
   driveForward(rightSpeed, leftSpeed);
@@ -193,13 +169,12 @@ void turnRight() {
   analogWrite(LEFT_BACKWARD, 0);
 }
 
-// Draai links tot voor weer vrij is
-void turnLeftUntilFrontIsFree() {
+void turnLeftUntilFrontFree() {
   unsigned long startTime = millis();
 
   while (millis() - startTime < 1200) {
     turnLeft();
-    delay(40);
+    delay(30);
 
     int frontDistance = measureDistance(ULTRA_SONIC_TRIG_FRONT, ULTRA_SONIC_ECHO_FRONT);
     if (frontDistance == 999 || frontDistance > FRONT_WALL_DISTANCE) {
@@ -211,13 +186,12 @@ void turnLeftUntilFrontIsFree() {
   delay(60);
 }
 
-// Draai rechts tot voor weer vrij is
-void turnRightUntilFrontIsFree() {
+void turnRightUntilFrontFree() {
   unsigned long startTime = millis();
 
   while (millis() - startTime < 1200) {
     turnRight();
-    delay(40);
+    delay(30);
 
     int frontDistance = measureDistance(ULTRA_SONIC_TRIG_FRONT, ULTRA_SONIC_ECHO_FRONT);
     if (frontDistance == 999 || frontDistance > FRONT_WALL_DISTANCE) {
