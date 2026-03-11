@@ -1,5 +1,5 @@
-const int RIGHT_BACKWARD = 10;
-const int RIGHT_FORWARD = 9;
+const int RIGHT_BACKWARD = 6;
+const int RIGHT_FORWARD = 5;
 
 const int ULTRA_SONIC_TRIG_FRONT = 8;
 const int ULTRA_SONIC_ECHO_FRONT = 7;
@@ -7,8 +7,8 @@ const int ULTRA_SONIC_ECHO_FRONT = 7;
 const int ULTRA_SONIC_TRIG_LEFT = 4;
 const int ULTRA_SONIC_ECHO_LEFT = 13;
 
-const int LEFT_BACKWARD = 6;
-const int LEFT_FORWARD = 5;
+const int LEFT_BACKWARD = 10;
+const int LEFT_FORWARD = 9;
 
 const int RIGHT_IN = 2;
 const int LEFT_IN = 3;
