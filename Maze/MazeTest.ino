@@ -4,8 +4,8 @@ const int RIGHT_FORWARD = 9;
 const int ULTRA_SONIC_TRIG_FRONT = 8;
 const int ULTRA_SONIC_ECHO_FRONT = 7;
 
-const int ULTRA_SONIC_TRIG_LEFT = 12;
-const int ULTRA_SONIC_ECHO_LEFT = 4;
+const int ULTRA_SONIC_TRIG_LEFT = 4;
+const int ULTRA_SONIC_ECHO_LEFT = 12;
 
 const int LEFT_BACKWARD = 6;
 const int LEFT_FORWARD = 5;
