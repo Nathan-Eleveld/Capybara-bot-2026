@@ -14,10 +14,10 @@ const int LEFT_IN  = 3;
 const int GRIPPER  = 11;
 
 // Afstanden
-const int LEFT_MIN_TARGET = 12;
-const int LEFT_MAX_TARGET = 15;
+const int LEFT_MIN_TARGET = 6;
+const int LEFT_MAX_TARGET = 10;
 const int FRONT_BLOCKED   = 18;
-const int LEFT_OPENING    = 20;
+const int LEFT_OPENING    = 12;
 
 // Snelheden
 const int BASE_SPEED      = 150;
