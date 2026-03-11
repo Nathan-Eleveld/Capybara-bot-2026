@@ -14,46 +14,39 @@ const int LEFT_IN  = 3;
 const int GRIPPER  = 11;
 
 // Afstanden
-const int TARGET_LEFT_DISTANCE   = 14;
-const int LEFT_DEAD_ZONE         = 3;
-const int FRONT_STOP_DISTANCE    = 16;
-const int FRONT_SAFE_DISTANCE    = 22;
-const int LEFT_OPEN_DISTANCE     = 24;
-const int LEFT_WALL_MAX_DISTANCE = 22;
-
-// Sensor filtering
+const int FRONT_BLOCKED_DISTANCE = 14;
+const int FRONT_OPEN_DISTANCE    = 20;
+const int LEFT_OPEN_DISTANCE     = 22;
 const int MAX_VALID_DISTANCE     = 180;
 const int INVALID_DISTANCE       = 999;
+
+// Sensor timeout
 const unsigned long SONAR_TIMEOUT_US = 25000UL;
 
 // Snelheden
-const int BASE_SPEED             = 150;
-const int CORRECTION_FAST_SPEED  = 165;
-const int CORRECTION_SLOW_SPEED  = 105;
-const int TURN_SPEED             = 165;
-const int REVERSE_SPEED          = 135;
+const int DRIVE_SPEED   = 150;
+const int TURN_SPEED    = 165;
+const int REVERSE_SPEED = 130;
 
 // Tijden
-const unsigned long LOOP_DELAY_MS           = 35;
-const unsigned long SHORT_STOP_MS           = 90;
-const unsigned long SHARP_TURN_STOP_MS      = 120;
-const unsigned long LEFT_TURN_STEP_MS       = 280;
-const unsigned long RIGHT_TURN_STEP_MS      = 300;
-const unsigned long FORWARD_AFTER_TURN_MS   = 120;
-const unsigned long REVERSE_TIME_MS         = 180;
-const unsigned long TURN_COOLDOWN_MS        = 450;
-const unsigned long DEBUG_INTERVAL_MS       = 220;
+const unsigned long LOOP_DELAY_MS        = 40;
+const unsigned long STOP_BEFORE_TURN_MS  = 120;
+const unsigned long STOP_AFTER_TURN_MS   = 80;
+const unsigned long LEFT_TURN_TIME_MS    = 320;
+const unsigned long RIGHT_TURN_TIME_MS   = 320;
+const unsigned long FORWARD_STEP_MS      = 140;
+const unsigned long REVERSE_TIME_MS      = 180;
+const unsigned long DEBUG_INTERVAL_MS    = 250;
+const unsigned long ACTION_COOLDOWN_MS   = 250;
 
 // Anti-vastloop
-const int MAX_REPEAT_SAME_DECISION = 7;
-const int MAX_ACTION_FLIPS         = 8;
+const int MAX_SAME_ACTION_COUNT = 8;
+const int MAX_FLIP_COUNT        = 8;
 const unsigned long FLIP_WINDOW_MS = 2500;
 
 enum Action {
   ACTION_STOP,
   ACTION_FORWARD,
-  ACTION_CORRECT_LEFT,
-  ACTION_CORRECT_RIGHT,
   ACTION_TURN_LEFT,
   ACTION_TURN_RIGHT,
   ACTION_REVERSE_STUCK
@@ -63,17 +56,17 @@ int frontDistance = INVALID_DISTANCE;
 int leftDistance  = INVALID_DISTANCE;
 
 int lastFrontDistance = 40;
-int lastLeftDistance  = TARGET_LEFT_DISTANCE;
+int lastLeftDistance  = 20;
 
 Action currentAction = ACTION_STOP;
-Action lastAction = ACTION_STOP;
+Action lastAction    = ACTION_STOP;
 
-unsigned long lastTurnTime = 0;
 unsigned long lastDebugTime = 0;
-unsigned long actionFlipWindowStart = 0;
+unsigned long lastActionTime = 0;
+unsigned long flipWindowStart = 0;
 
-int repeatedDecisionCount = 0;
-int actionFlipCount = 0;
+int sameActionCount = 0;
+int flipCount = 0;
 bool antiStuckActive = false;
 
 int medianOf3(int a, int b, int c) {
@@ -87,8 +80,6 @@ const char* actionToText(Action action) {
   switch (action) {
     case ACTION_STOP:          return "STOP";
     case ACTION_FORWARD:       return "FORWARD";
-    case ACTION_CORRECT_LEFT:  return "CORRECT_LEFT";
-    case ACTION_CORRECT_RIGHT: return "CORRECT_RIGHT";
     case ACTION_TURN_LEFT:     return "TURN_LEFT";
     case ACTION_TURN_RIGHT:    return "TURN_RIGHT";
     case ACTION_REVERSE_STUCK: return "REVERSE_STUCK";
@@ -96,6 +87,7 @@ const char* actionToText(Action action) {
   }
 }
 
+// Motor aansturing
 void applyMotor(int forwardPin, int backwardPin, int speedValue) {
   speedValue = constrain(speedValue, -255, 255);
 
@@ -121,15 +113,11 @@ void stopMotors() {
 }
 
 void driveForward() {
-  setMotorSpeeds(BASE_SPEED, BASE_SPEED);
+  setMotorSpeeds(DRIVE_SPEED, DRIVE_SPEED);
 }
 
-void correctLeft() {
-  setMotorSpeeds(CORRECTION_SLOW_SPEED, CORRECTION_FAST_SPEED);
-}
-
-void correctRight() {
-  setMotorSpeeds(CORRECTION_FAST_SPEED, CORRECTION_SLOW_SPEED);
+void reverseShort() {
+  setMotorSpeeds(-REVERSE_SPEED, -REVERSE_SPEED);
 }
 
 void turnLeftInPlace() {
@@ -140,11 +128,8 @@ void turnRightInPlace() {
   setMotorSpeeds(TURN_SPEED, -TURN_SPEED);
 }
 
-void reverseShort() {
-  setMotorSpeeds(-REVERSE_SPEED, -REVERSE_SPEED);
-}
-
-int measureDistanceCmRaw(int trigPin, int echoPin) {
+// Sensor meting
+int measureDistanceRaw(int trigPin, int echoPin) {
   digitalWrite(trigPin, LOW);
   delayMicroseconds(3);
   digitalWrite(trigPin, HIGH);
@@ -153,9 +138,7 @@ int measureDistanceCmRaw(int trigPin, int echoPin) {
 
   unsigned long duration = pulseIn(echoPin, HIGH, SONAR_TIMEOUT_US);
 
-  if (duration == 0) {
-    return INVALID_DISTANCE;
-  }
+  if (duration == 0) return INVALID_DISTANCE;
 
   int distance = duration / 58;
 
@@ -166,27 +149,24 @@ int measureDistanceCmRaw(int trigPin, int echoPin) {
   return distance;
 }
 
-int readFilteredDistance(int trigPin, int echoPin, int lastValidDistance) {
-  int d1 = measureDistanceCmRaw(trigPin, echoPin);
-  delayMicroseconds(800);
-  int d2 = measureDistanceCmRaw(trigPin, echoPin);
-  delayMicroseconds(800);
-  int d3 = measureDistanceCmRaw(trigPin, echoPin);
+int readFilteredDistance(int trigPin, int echoPin, int lastValid) {
+  int d1 = measureDistanceRaw(trigPin, echoPin);
+  delayMicroseconds(700);
+  int d2 = measureDistanceRaw(trigPin, echoPin);
+  delayMicroseconds(700);
+  int d3 = measureDistanceRaw(trigPin, echoPin);
 
-  if (d1 == INVALID_DISTANCE) d1 = lastValidDistance;
-  if (d2 == INVALID_DISTANCE) d2 = lastValidDistance;
-  if (d3 == INVALID_DISTANCE) d3 = lastValidDistance;
+  if (d1 == INVALID_DISTANCE) d1 = lastValid;
+  if (d2 == INVALID_DISTANCE) d2 = lastValid;
+  if (d3 == INVALID_DISTANCE) d3 = lastValid;
 
-  int median = medianOf3(d1, d2, d3);
+  int result = medianOf3(d1, d2, d3);
 
-  if (lastValidDistance != INVALID_DISTANCE) {
-    int maxJump = 35;
-    if (abs(median - lastValidDistance) > maxJump) {
-      median = (lastValidDistance * 2 + median) / 3;
-    }
+  if (lastValid != INVALID_DISTANCE && abs(result - lastValid) > 40) {
+    result = (result + lastValid) / 2;
   }
 
-  return median;
+  return result;
 }
 
 void updateDistances() {
@@ -203,21 +183,22 @@ void updateDistances() {
   );
 
   lastFrontDistance = frontDistance;
-  lastLeftDistance = leftDistance;
+  lastLeftDistance  = leftDistance;
 }
 
 bool isFrontBlocked() {
-  return frontDistance <= FRONT_STOP_DISTANCE;
+  return frontDistance <= FRONT_BLOCKED_DISTANCE;
+}
+
+bool isFrontOpen() {
+  return frontDistance >= FRONT_OPEN_DISTANCE;
 }
 
 bool isLeftOpen() {
   return leftDistance >= LEFT_OPEN_DISTANCE;
 }
 
-bool hasUsableLeftWall() {
-  return leftDistance < LEFT_OPEN_DISTANCE && leftDistance <= LEFT_WALL_MAX_DISTANCE;
-}
-
+// Debug
 void printDebug() {
   if (millis() - lastDebugTime < DEBUG_INTERVAL_MS) return;
   lastDebugTime = millis();
@@ -226,36 +207,38 @@ void printDebug() {
   Serial.print(frontDistance);
   Serial.print(" cm | left distance: ");
   Serial.print(leftDistance);
-  Serial.print(" cm | action: ");
+  Serial.print(" cm | actie: ");
   Serial.print(actionToText(currentAction));
   Serial.print(" | anti-vastloop: ");
   Serial.println(antiStuckActive ? "JA" : "NEE");
 }
 
+// Anti-vastloop tracking
 void registerAction(Action action) {
   currentAction = action;
 
   if (action == lastAction) {
-    repeatedDecisionCount++;
+    sameActionCount++;
   } else {
-    repeatedDecisionCount = 0;
+    sameActionCount = 0;
   }
 
-  if (actionFlipWindowStart == 0 || millis() - actionFlipWindowStart > FLIP_WINDOW_MS) {
-    actionFlipWindowStart = millis();
-    actionFlipCount = 0;
+  if (flipWindowStart == 0 || millis() - flipWindowStart > FLIP_WINDOW_MS) {
+    flipWindowStart = millis();
+    flipCount = 0;
   }
 
   if (action != lastAction) {
-    actionFlipCount++;
+    flipCount++;
   }
 
   lastAction = action;
+  lastActionTime = millis();
 }
 
 bool shouldRunAntiStuck() {
-  if (repeatedDecisionCount >= MAX_REPEAT_SAME_DECISION) return true;
-  if (actionFlipCount >= MAX_ACTION_FLIPS) return true;
+  if (sameActionCount >= MAX_SAME_ACTION_COUNT) return true;
+  if (flipCount >= MAX_FLIP_COUNT) return true;
   return false;
 }
 
@@ -265,118 +248,97 @@ void runAntiStuck() {
   printDebug();
 
   stopMotors();
-  delay(SHORT_STOP_MS);
+  delay(100);
 
   reverseShort();
   delay(REVERSE_TIME_MS);
 
   stopMotors();
-  delay(SHORT_STOP_MS);
+  delay(100);
 
   turnRightInPlace();
   delay(220);
 
   stopMotors();
-  delay(SHORT_STOP_MS);
+  delay(100);
 
-  repeatedDecisionCount = 0;
-  actionFlipCount = 0;
-  actionFlipWindowStart = millis();
+  sameActionCount = 0;
+  flipCount = 0;
+  flipWindowStart = millis();
   antiStuckActive = false;
 }
 
-void executeLeftTurn() {
-  registerAction(ACTION_TURN_LEFT);
-  stopMotors();
-  delay(SHARP_TURN_STOP_MS);
-
-  turnLeftInPlace();
-  delay(LEFT_TURN_STEP_MS);
-
-  stopMotors();
-  delay(SHORT_STOP_MS);
-
-  driveForward();
-  delay(FORWARD_AFTER_TURN_MS);
-
-  lastTurnTime = millis();
-}
-
-void executeRightTurn() {
-  registerAction(ACTION_TURN_RIGHT);
-  stopMotors();
-  delay(SHARP_TURN_STOP_MS);
-
-  turnRightInPlace();
-  delay(RIGHT_TURN_STEP_MS);
-
-  stopMotors();
-  delay(SHORT_STOP_MS);
-
-  lastTurnTime = millis();
-}
-
-void followLeftWall() {
-  int error = leftDistance - TARGET_LEFT_DISTANCE;
-
-  if (abs(error) <= LEFT_DEAD_ZONE) {
-    registerAction(ACTION_FORWARD);
-    driveForward();
-    return;
-  }
-
-  if (error > LEFT_DEAD_ZONE) {
-    registerAction(ACTION_CORRECT_LEFT);
-    correctLeft();
-  } else {
-    registerAction(ACTION_CORRECT_RIGHT);
-    correctRight();
-  }
-}
-
-void moveForwardWithoutWallCorrection() {
+// Bewegingen
+void doForwardStep() {
   registerAction(ACTION_FORWARD);
   driveForward();
+  delay(FORWARD_STEP_MS);
+  stopMotors();
+  delay(40);
 }
 
-void decideAndDrive() {
+void doLeftTurn() {
+  registerAction(ACTION_TURN_LEFT);
+
+  stopMotors();
+  delay(STOP_BEFORE_TURN_MS);
+
+  turnLeftInPlace();
+  delay(LEFT_TURN_TIME_MS);
+
+  stopMotors();
+  delay(STOP_AFTER_TURN_MS);
+
+  driveForward();
+  delay(FORWARD_STEP_MS);
+
+  stopMotors();
+  delay(40);
+}
+
+void doRightTurn() {
+  registerAction(ACTION_TURN_RIGHT);
+
+  stopMotors();
+  delay(STOP_BEFORE_TURN_MS);
+
+  turnRightInPlace();
+  delay(RIGHT_TURN_TIME_MS);
+
+  stopMotors();
+  delay(STOP_AFTER_TURN_MS);
+
+  driveForward();
+  delay(FORWARD_STEP_MS);
+
+  stopMotors();
+  delay(40);
+}
+
+// Beslissing zonder zigzag-correcties
+void decideNextMove() {
+  stopMotors();
+  registerAction(ACTION_STOP);
+  delay(50);
+
+  updateDistances();
+
+  bool leftOpen  = isLeftOpen();
+  bool frontOpen = isFrontOpen();
   bool frontBlocked = isFrontBlocked();
-  bool leftOpen = isLeftOpen();
-  bool leftWallUsable = hasUsableLeftWall();
-  bool turnCooldownActive = millis() - lastTurnTime < TURN_COOLDOWN_MS;
 
-  if (frontBlocked) {
-    registerAction(ACTION_STOP);
-    stopMotors();
-    delay(SHORT_STOP_MS);
-
-    updateDistances();
-    frontBlocked = isFrontBlocked();
-    leftOpen = isLeftOpen();
-
-    if (!frontBlocked) {
-      return;
-    }
-
-    if (leftOpen) {
-      executeLeftTurn();
-    } else {
-      executeRightTurn();
-    }
-
+  // Linkerhandregel
+  if (leftOpen) {
+    doLeftTurn();
     return;
   }
 
-  if (leftOpen && !turnCooldownActive) {
-    executeLeftTurn();
+  if (frontOpen && !frontBlocked) {
+    doForwardStep();
     return;
   }
 
-  if (leftWallUsable) {
-    followLeftWall();
-  } else {
-    moveForwardWithoutWallCorrection();
-  }
+  doRightTurn();
 }
 
 void setup() {
@@ -404,18 +366,25 @@ void setup() {
 
   updateDistances();
   lastFrontDistance = frontDistance;
-  lastLeftDistance = leftDistance;
+  lastLeftDistance  = leftDistance;
 
   Serial.println("Maze solver gestart");
 }
 
 void loop() {
   updateDistances();
-  decideAndDrive();
   printDebug();
+
+  if (millis() - lastActionTime >= ACTION_COOLDOWN_MS) {
+    decideNextMove();
+  }
 
   if (shouldRunAntiStuck()) {
     runAntiStuck();
+  }
+
+  delay(LOOP_DELAY_MS);
+}
   }
 
   delay(LOOP_DELAY_MS);
