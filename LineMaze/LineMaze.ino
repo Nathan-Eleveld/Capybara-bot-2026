@@ -9,8 +9,8 @@
 #define WHEEL_SPEED 255
 #define ULTRA_SONIC_TRIG 8
 #define ULTRA_SONIC_ECHO 7
-#define SERVO_OPEN 1700
-#define SERVO_CLOSED 1050
+#define SERVO_OPEN 1500
+#define SERVO_CLOSED 1000
 #define GRIPPER 11
 #define NEO_PIXEL_PIN 12
 const int SENSOR_PINS[8] = {A0, A1, A2, A3, A4, A5, A6, A7};
@@ -41,8 +41,8 @@ void setup(){
 
   pixels.begin();
   pixels.clear();
-  setPixelsGreenToRed(0,0,1,1);
-
+  setPixelsGreenToRed(0,0,0,0);
+  
   for(int pin : SENSOR_PINS){
     pinMode(pin, INPUT);   
     digitalWrite(pin, LOW); 
@@ -62,7 +62,7 @@ void setup(){
   attachInterrupt(digitalPinToInterrupt(LEFT_IN), countPulseleftWheelISR, RISING);
 
   while(ultraSonicSensor() < 15){
-    clawOpen(true);
+    
   }
 
   calibrateBoundrys();
@@ -72,21 +72,21 @@ void setup(){
 void loop(){
   getReadings();
   updateServo();
-  drive();
-  if(mostlyBlack()){
-    checkForFinish();
+  if(!sensorReadings[1] && (!sensorReadings[5] || !sensorReadings[4])){
+    rightTurn();
+  } else{
+    drive(); 
   }
-  
-//  if(lastActiveSonic < millis()){
-//    if(ultraSonicSensor() < 15)
-//    {
-//      stopWheels(); 
-//      while(rightPulses < 20){
-//        analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
-//        analogWrite(LEFT_BACKWARD, WHEEL_SPEED);
-//      }
-//    }
-//  }
+  if(lastActiveSonic < millis()){
+    if(ultraSonicSensor() < 15)
+    {
+      stopWheels(); 
+      while(rightPulses < 20){
+        analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
+        analogWrite(LEFT_BACKWARD, WHEEL_SPEED);
+      }
+    }
+  }
 }
 
 void calibrateBoundrys(){
@@ -145,32 +145,29 @@ void drive(){
   switch(getAverageSensorPin()){
     case 1:
       writeWheels(1, 0);
-      setPixelsGreenToRed(0,0,1,0);
+      setPixelsGreenToRed(0,0,0,0.5);
       break;
     case 2:
       writeWheels(1, 0.1);
-      setPixelsGreenToRed(0,0,0.7,0);
+      setPixelsGreenToRed(0,0,0,0.3);
       break;
     case 3:
       writeWheels(1, 0.3);
-      setPixelsGreenToRed(0,0,0.5,0);
       break;
     case 4:
       writeWheels(1, 1);
-      setPixelsGreenToRed(0,0,0,0);
       break;
     case 5:
       writeWheels(0.3, 1);
-      setPixelsGreenToRed(0,0,0,0.5);
       break;
     case 6:
       writeWheels(0.1, 1);
-      setPixelsGreenToRed(0,0,0,0.7);
+      setPixelsGreenToRed(0,0,0.3,0);
       break;
     case 7:
     case 8:
       writeWheels(0, 1);
-      setPixelsGreenToRed(0,0,0,1);
+      setPixelsGreenToRed(0,0,0.5,0);
       break;
     case 0:
       analogWrite(RIGHT_BACKWARD, WHEEL_SPEED * 0.8);
@@ -203,12 +200,13 @@ void getOnTrack(){
   while(rightPulses < 10 && leftPulses < 10){
     analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
     analogWrite(LEFT_FORWARD, WHEEL_SPEED);
+//    Serial.println(rightPulses);
   }
   stopWheels();
-  clawOpen(false);
   while(rightPulses < 15){
     clawOpen(false);
     analogWrite(LEFT_FORWARD, WHEEL_SPEED);
+//    Serial.println(rightPulses);
   }
   analogWrite(LEFT_FORWARD, 0);
 }
@@ -235,22 +233,26 @@ void rightTurn(){
 }
 
 void checkForFinish(){
-  updateServo();
   stopWheels();
   while(leftPulses < 5){
     analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
     analogWrite(LEFT_FORWARD, WHEEL_SPEED);
   }
   stopWheels();
+  delay(50);
   if(mostlyBlack()){
     while(leftPulses < 15){
-      analogWrite(RIGHT_BACKWARD, WHEEL_SPEED);
-      analogWrite(LEFT_BACKWARD, WHEEL_SPEED);
+      analogWrite(RIGHT_BACKWARD, 0);
+      analogWrite(LEFT_BACKWARD, 0);
       clawOpen(true);
     }
     stopWheels();
     setPixelsGreenToRed(1,1,1,1);
     while(true){}
+  }
+  while(leftPulses < 6){
+    analogWrite(RIGHT_BACKWARD, WHEEL_SPEED);
+    analogWrite(LEFT_FORWARD, WHEEL_SPEED);
   }
   stopWheels();
   delay(50);
@@ -258,7 +260,13 @@ void checkForFinish(){
 
 boolean mostlyBlack(){
   getReadings();
-  return (!sensorReadings[7] && !sensorReadings[2]);
+  int count = 0;
+  for(int reading : sensorReadings){
+    if(reading){
+      count++;
+    }
+  }
+  return (count < 6);
 }
 
 int ultraSonicSensor(){
@@ -303,8 +311,8 @@ void updateServo() {
 }
 
 void setPixelsGreenToRed(double colorZero, double colorOne, double colorTwo, double colorThree){
-  pixels.setPixelColor(0, pixels.Color(50, 200, 0));
-  pixels.setPixelColor(1, pixels.Color(50, 200, 0));
+  pixels.setPixelColor(0, pixels.Color(0, 200, 110));
+  pixels.setPixelColor(1, pixels.Color(0, 200, 110));
   pixels.setPixelColor(2, pixels.Color(255 - colorTwo * 255, colorTwo * 255, 0));
   pixels.setPixelColor(3, pixels.Color(255 - colorThree * 255, colorThree * 255, 0));
   pixels.show();
