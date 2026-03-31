@@ -283,3 +283,24 @@ void turnRight90() {
   delay(TURN_90_TIME);
   stopBrief();
 }
+
+Front: 29 cm | Left: 36 cm | RP: 7 | LP: 6
+Front: 29 cm | Left: 41 cm | RP: 13 | LP: 13
+Front: 250 cm | Left: 35 cm | RP: 20 | LP: 19
+Front: 34 cm | Left: 29 cm | RP: 27 | LP: 25
+Front: 33 cm | Left: 25 cm | RP: 33 | LP: 31
+Front: 21 cm | Left: 41 cm | RP: 40 | LP: 37
+Front: 41 cm | Left: 50 cm | RP: 46 | LP: 43
+Front: 38 cm | Left: 34 cm | RP: 53 | LP: 48
+Front: 55 cm | Left: 56 cm | RP: 59 | LP: 53
+Front: 35 cm | Left: 40 cm | RP: 65 | LP: 59
+Front: 250 cm | Left: 40 cm | RP: 72 | LP: 65
+Front: 34 cm | Left: 28 cm | RP: 79 | LP: 71
+Front: 29 cm | Left: 14 cm | RP: 85 | LP: 76
+Front: 20 cm | Left: 41 cm | RP: 91 | LP: 83
+Front: 250 cm | Left: 50 cm | RP: 97 | LP: 88
+Front: 35 cm | Left: 38 cm | RP: 103 | LP: 93
+Front: 52 cm | Left: 60 cm | RP: 109 | LP: 99
+Front: 39 cm | Left: 40 cm | RP: 115 | LP: 104
+Front: 250 cm | Left: 37 cm | RP: 121 | LP: 110
+Front: 34 cm | Left: 25 cm | RP: 128 | LP: 116
