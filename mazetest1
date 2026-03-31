@@ -1,0 +1,285 @@
+const int RIGHT_BACKWARD = 6;
+const int RIGHT_FORWARD = 5;
+const int LEFT_BACKWARD = 10;
+const int LEFT_FORWARD = 9;
+
+const int ULTRA_SONIC_TRIG_FRONT = 8;
+const int ULTRA_SONIC_ECHO_FRONT = 7;
+
+const int ULTRA_SONIC_TRIG_LEFT = 4;
+const int ULTRA_SONIC_ECHO_LEFT = 13;
+
+const int RIGHT_IN = 2;
+const int LEFT_IN = 3;
+const int GRIPPER = 11;
+
+// Afstanden
+const int FRONT_BLOCKED = 14;
+const int LEFT_OPENING = 12;
+
+// Snelheden
+const int DRIVE_SPEED = 160;
+const int TURN_SPEED = 160;
+const int BACK_SPEED = 150;
+
+// Tijden
+const int TURN_90_TIME = 370;
+const int BACKUP_TIME = 220;
+const int STEP_FORWARD_TIME = 120;
+const int STOP_TIME = 80;
+
+// Sensor timeout
+const unsigned long PULSE_TIMEOUT = 25000UL;
+
+// Debug
+unsigned long lastDebug = 0;
+
+// Encoder / vast detectie
+volatile unsigned long rightPulses = 0;
+volatile unsigned long leftPulses = 0;
+
+unsigned long lastStuckCheck = 0;
+unsigned long lastRightPulseSnapshot = 0;
+unsigned long lastLeftPulseSnapshot = 0;
+
+bool drivingForwardNow = false;
+int stuckCounter = 0;
+
+const unsigned long STUCK_CHECK_INTERVAL = 300;
+const int MIN_PULSES_MOVING = 2;
+const int STUCK_LIMIT = 3;
+
+void rightPulseISR() {
+  rightPulses++;
+}
+
+void leftPulseISR() {
+  leftPulses++;
+}
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(RIGHT_BACKWARD, OUTPUT);
+  pinMode(RIGHT_FORWARD, OUTPUT);
+  pinMode(LEFT_BACKWARD, OUTPUT);
+  pinMode(LEFT_FORWARD, OUTPUT);
+
+  pinMode(ULTRA_SONIC_TRIG_FRONT, OUTPUT);
+  pinMode(ULTRA_SONIC_ECHO_FRONT, INPUT);
+
+  pinMode(ULTRA_SONIC_TRIG_LEFT, OUTPUT);
+  pinMode(ULTRA_SONIC_ECHO_LEFT, INPUT);
+
+  pinMode(RIGHT_IN, INPUT);
+  pinMode(LEFT_IN, INPUT);
+  pinMode(GRIPPER, OUTPUT);
+
+  attachInterrupt(digitalPinToInterrupt(RIGHT_IN), rightPulseISR, RISING);
+  attachInterrupt(digitalPinToInterrupt(LEFT_IN), leftPulseISR, RISING);
+
+  digitalWrite(GRIPPER, LOW);
+  stopMotors();
+  delay(500);
+}
+
+void loop() {
+  checkIfStuck();
+
+  int frontDistance = readDistanceCm(ULTRA_SONIC_TRIG_FRONT, ULTRA_SONIC_ECHO_FRONT);
+  int leftDistance = readDistanceCm(ULTRA_SONIC_TRIG_LEFT, ULTRA_SONIC_ECHO_LEFT);
+
+  if (millis() - lastDebug > 200) {
+    Serial.print("Front: ");
+    Serial.print(frontDistance);
+    Serial.print(" cm | Left: ");
+    Serial.print(leftDistance);
+    Serial.print(" cm | RP: ");
+    Serial.print(rightPulses);
+    Serial.print(" | LP: ");
+    Serial.println(leftPulses);
+    lastDebug = millis();
+  }
+
+  bool leftOpen = leftDistance > LEFT_OPENING;
+  bool frontOpen = frontDistance > FRONT_BLOCKED;
+
+  // 1. links open = altijd linksaf
+  if (leftOpen) {
+    stopBrief();
+    turnLeft90();
+    driveForwardBlock();
+    return;
+  }
+
+  // 2. links dicht, rechtdoor open = rechtdoor
+  if (frontOpen) {
+    driveForwardBlock();
+    return;
+  }
+
+  // 3. links dicht en rechtdoor dicht = rechtsaf
+  stopBrief();
+  turnRight90();
+  driveForwardBlock();
+}
+
+void checkIfStuck() {
+  if (!drivingForwardNow) {
+    stuckCounter = 0;
+    lastStuckCheck = millis();
+    lastRightPulseSnapshot = rightPulses;
+    lastLeftPulseSnapshot = leftPulses;
+    return;
+  }
+
+  if (millis() - lastStuckCheck < STUCK_CHECK_INTERVAL) {
+    return;
+  }
+
+  unsigned long currentRight = rightPulses;
+  unsigned long currentLeft = leftPulses;
+
+  unsigned long deltaRight = currentRight - lastRightPulseSnapshot;
+  unsigned long deltaLeft = currentLeft - lastLeftPulseSnapshot;
+
+  lastRightPulseSnapshot = currentRight;
+  lastLeftPulseSnapshot = currentLeft;
+  lastStuckCheck = millis();
+
+  if (deltaRight < MIN_PULSES_MOVING && deltaLeft < MIN_PULSES_MOVING) {
+    stuckCounter++;
+  } else {
+    stuckCounter = 0;
+  }
+
+  if (stuckCounter >= STUCK_LIMIT) {
+    emergencyUnstuck();
+    stuckCounter = 0;
+  }
+}
+
+void emergencyUnstuck() {
+  stopBrief();
+  driveBackward(BACK_SPEED, BACK_SPEED);
+  delay(300);
+  stopBrief();
+  turnRight90();
+  driveForwardBlock();
+}
+
+int readDistanceCm(int trigPin, int echoPin) {
+  int a = singleReadDistanceCm(trigPin, echoPin);
+  delay(4);
+  int b = singleReadDistanceCm(trigPin, echoPin);
+  delay(4);
+  int c = singleReadDistanceCm(trigPin, echoPin);
+  return median3(a, b, c);
+}
+
+int singleReadDistanceCm(int trigPin, int echoPin) {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(3);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  unsigned long duration = pulseIn(echoPin, HIGH, PULSE_TIMEOUT);
+
+  if (duration == 0) return 250;
+
+  int distance = duration * 0.0343 / 2.0;
+
+  if (distance < 2) distance = 2;
+  if (distance > 250) distance = 250;
+
+  return distance;
+}
+
+int median3(int a, int b, int c) {
+  if ((a >= b && a <= c) || (a >= c && a <= b)) return a;
+  if ((b >= a && b <= c) || (b >= c && b <= a)) return b;
+  return c;
+}
+
+void drive(int leftSpeed, int rightSpeed) {
+  drivingForwardNow = true;
+
+  leftSpeed = constrain(leftSpeed, 0, 255);
+  rightSpeed = constrain(rightSpeed, 0, 255);
+
+  analogWrite(LEFT_FORWARD, leftSpeed);
+  analogWrite(LEFT_BACKWARD, 0);
+
+  analogWrite(RIGHT_FORWARD, rightSpeed);
+  analogWrite(RIGHT_BACKWARD, 0);
+}
+
+void driveBackward(int leftSpeed, int rightSpeed) {
+  drivingForwardNow = false;
+
+  leftSpeed = constrain(leftSpeed, 0, 255);
+  rightSpeed = constrain(rightSpeed, 0, 255);
+
+  analogWrite(LEFT_FORWARD, 0);
+  analogWrite(LEFT_BACKWARD, leftSpeed);
+
+  analogWrite(RIGHT_FORWARD, 0);
+  analogWrite(RIGHT_BACKWARD, rightSpeed);
+}
+
+void rotateLeft(int speed) {
+  drivingForwardNow = false;
+
+  speed = constrain(speed, 0, 255);
+
+  analogWrite(LEFT_FORWARD, 0);
+  analogWrite(LEFT_BACKWARD, speed);
+
+  analogWrite(RIGHT_FORWARD, speed);
+  analogWrite(RIGHT_BACKWARD, 0);
+}
+
+void rotateRight(int speed) {
+  drivingForwardNow = false;
+
+  speed = constrain(speed, 0, 255);
+
+  analogWrite(LEFT_FORWARD, speed);
+  analogWrite(LEFT_BACKWARD, 0);
+
+  analogWrite(RIGHT_FORWARD, 0);
+  analogWrite(RIGHT_BACKWARD, speed);
+}
+
+void stopMotors() {
+  drivingForwardNow = false;
+
+  analogWrite(LEFT_FORWARD, 0);
+  analogWrite(LEFT_BACKWARD, 0);
+  analogWrite(RIGHT_FORWARD, 0);
+  analogWrite(RIGHT_BACKWARD, 0);
+}
+
+void stopBrief() {
+  stopMotors();
+  delay(STOP_TIME);
+}
+
+void driveForwardBlock() {
+  drive(DRIVE_SPEED, DRIVE_SPEED);
+  delay(STEP_FORWARD_TIME);
+  stopBrief();
+}
+
+void turnLeft90() {
+  rotateLeft(TURN_SPEED);
+  delay(TURN_90_TIME);
+  stopBrief();
+}
+
+void turnRight90() {
+  rotateRight(TURN_SPEED);
+  delay(TURN_90_TIME);
+  stopBrief();
+}
