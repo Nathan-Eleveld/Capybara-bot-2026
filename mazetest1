@@ -15,47 +15,26 @@ const int GRIPPER = 11;
 
 // Afstanden
 const int FRONT_BLOCKED = 14;
-const int LEFT_OPENING = 12;
+const int LEFT_WALL_NEAR = 8;
+const int LEFT_WALL_FAR = 12;
+const int LEFT_OPENING = 25;
 
 // Snelheden
-const int DRIVE_SPEED = 160;
+const int LEFT_BASE_SPEED = 150;
+const int RIGHT_BASE_SPEED = 160;
 const int TURN_SPEED = 160;
-const int BACK_SPEED = 150;
 
 // Tijden
 const int TURN_90_TIME = 370;
-const int BACKUP_TIME = 220;
-const int STEP_FORWARD_TIME = 120;
 const int STOP_TIME = 80;
+const int FORWARD_STEP_TIME = 90;
+const int AFTER_TURN_FORWARD_TIME = 220;
 
 // Sensor timeout
 const unsigned long PULSE_TIMEOUT = 25000UL;
 
 // Debug
 unsigned long lastDebug = 0;
-
-// Encoder / vast detectie
-volatile unsigned long rightPulses = 0;
-volatile unsigned long leftPulses = 0;
-
-unsigned long lastStuckCheck = 0;
-unsigned long lastRightPulseSnapshot = 0;
-unsigned long lastLeftPulseSnapshot = 0;
-
-bool drivingForwardNow = false;
-int stuckCounter = 0;
-
-const unsigned long STUCK_CHECK_INTERVAL = 300;
-const int MIN_PULSES_MOVING = 2;
-const int STUCK_LIMIT = 3;
-
-void rightPulseISR() {
-  rightPulses++;
-}
-
-void leftPulseISR() {
-  leftPulses++;
-}
 
 void setup() {
   Serial.begin(9600);
@@ -75,17 +54,12 @@ void setup() {
   pinMode(LEFT_IN, INPUT);
   pinMode(GRIPPER, OUTPUT);
 
-  attachInterrupt(digitalPinToInterrupt(RIGHT_IN), rightPulseISR, RISING);
-  attachInterrupt(digitalPinToInterrupt(LEFT_IN), leftPulseISR, RISING);
-
   digitalWrite(GRIPPER, LOW);
   stopMotors();
   delay(500);
 }
 
 void loop() {
-  checkIfStuck();
-
   int frontDistance = readDistanceCm(ULTRA_SONIC_TRIG_FRONT, ULTRA_SONIC_ECHO_FRONT);
   int leftDistance = readDistanceCm(ULTRA_SONIC_TRIG_LEFT, ULTRA_SONIC_ECHO_LEFT);
 
@@ -94,78 +68,69 @@ void loop() {
     Serial.print(frontDistance);
     Serial.print(" cm | Left: ");
     Serial.print(leftDistance);
-    Serial.print(" cm | RP: ");
-    Serial.print(rightPulses);
-    Serial.print(" | LP: ");
-    Serial.println(leftPulses);
+    Serial.println(" cm");
     lastDebug = millis();
   }
 
-  bool leftOpen = leftDistance > LEFT_OPENING;
+  bool leftOpen = isLeftOpenConfirmed();
   bool frontOpen = frontDistance > FRONT_BLOCKED;
 
-  // 1. links open = altijd linksaf
+  // links open = altijd linksaf
   if (leftOpen) {
     stopBrief();
     turnLeft90();
-    driveForwardBlock();
+    driveStraightTimed(AFTER_TURN_FORWARD_TIME);
     return;
   }
 
-  // 2. links dicht, rechtdoor open = rechtdoor
+  // links dicht, voor open = rechtdoor
   if (frontOpen) {
-    driveForwardBlock();
+    driveCorridorStep(leftDistance);
     return;
   }
 
-  // 3. links dicht en rechtdoor dicht = rechtsaf
+  // links dicht en voor dicht = rechtsaf
   stopBrief();
   turnRight90();
-  driveForwardBlock();
+  driveStraightTimed(AFTER_TURN_FORWARD_TIME);
 }
 
-void checkIfStuck() {
-  if (!drivingForwardNow) {
-    stuckCounter = 0;
-    lastStuckCheck = millis();
-    lastRightPulseSnapshot = rightPulses;
-    lastLeftPulseSnapshot = leftPulses;
+bool isLeftOpenConfirmed() {
+  int a = readDistanceCm(ULTRA_SONIC_TRIG_LEFT, ULTRA_SONIC_ECHO_LEFT);
+  delay(15);
+  int b = readDistanceCm(ULTRA_SONIC_TRIG_LEFT, ULTRA_SONIC_ECHO_LEFT);
+  delay(15);
+  int c = readDistanceCm(ULTRA_SONIC_TRIG_LEFT, ULTRA_SONIC_ECHO_LEFT);
+
+  int openCount = 0;
+  if (a > LEFT_OPENING) openCount++;
+  if (b > LEFT_OPENING) openCount++;
+  if (c > LEFT_OPENING) openCount++;
+
+  return openCount >= 2;
+}
+
+void driveCorridorStep(int leftDistance) {
+  // te ver van de muur -> iets naar links
+  if (leftDistance > LEFT_WALL_FAR) {
+    drive(145, 165);
+    delay(FORWARD_STEP_TIME);
+    stopBrief();
     return;
   }
 
-  if (millis() - lastStuckCheck < STUCK_CHECK_INTERVAL) {
+  // te dicht op de muur -> iets naar rechts
+  if (leftDistance < LEFT_WALL_NEAR) {
+    drive(160, 145);
+    delay(FORWARD_STEP_TIME);
+    stopBrief();
     return;
   }
 
-  unsigned long currentRight = rightPulses;
-  unsigned long currentLeft = leftPulses;
-
-  unsigned long deltaRight = currentRight - lastRightPulseSnapshot;
-  unsigned long deltaLeft = currentLeft - lastLeftPulseSnapshot;
-
-  lastRightPulseSnapshot = currentRight;
-  lastLeftPulseSnapshot = currentLeft;
-  lastStuckCheck = millis();
-
-  if (deltaRight < MIN_PULSES_MOVING && deltaLeft < MIN_PULSES_MOVING) {
-    stuckCounter++;
-  } else {
-    stuckCounter = 0;
-  }
-
-  if (stuckCounter >= STUCK_LIMIT) {
-    emergencyUnstuck();
-    stuckCounter = 0;
-  }
-}
-
-void emergencyUnstuck() {
+  // mooi in het midden
+  drive(LEFT_BASE_SPEED, RIGHT_BASE_SPEED);
+  delay(FORWARD_STEP_TIME);
   stopBrief();
-  driveBackward(BACK_SPEED, BACK_SPEED);
-  delay(300);
-  stopBrief();
-  turnRight90();
-  driveForwardBlock();
 }
 
 int readDistanceCm(int trigPin, int echoPin) {
@@ -203,8 +168,6 @@ int median3(int a, int b, int c) {
 }
 
 void drive(int leftSpeed, int rightSpeed) {
-  drivingForwardNow = true;
-
   leftSpeed = constrain(leftSpeed, 0, 255);
   rightSpeed = constrain(rightSpeed, 0, 255);
 
@@ -215,22 +178,7 @@ void drive(int leftSpeed, int rightSpeed) {
   analogWrite(RIGHT_BACKWARD, 0);
 }
 
-void driveBackward(int leftSpeed, int rightSpeed) {
-  drivingForwardNow = false;
-
-  leftSpeed = constrain(leftSpeed, 0, 255);
-  rightSpeed = constrain(rightSpeed, 0, 255);
-
-  analogWrite(LEFT_FORWARD, 0);
-  analogWrite(LEFT_BACKWARD, leftSpeed);
-
-  analogWrite(RIGHT_FORWARD, 0);
-  analogWrite(RIGHT_BACKWARD, rightSpeed);
-}
-
 void rotateLeft(int speed) {
-  drivingForwardNow = false;
-
   speed = constrain(speed, 0, 255);
 
   analogWrite(LEFT_FORWARD, 0);
@@ -241,8 +189,6 @@ void rotateLeft(int speed) {
 }
 
 void rotateRight(int speed) {
-  drivingForwardNow = false;
-
   speed = constrain(speed, 0, 255);
 
   analogWrite(LEFT_FORWARD, speed);
@@ -253,8 +199,6 @@ void rotateRight(int speed) {
 }
 
 void stopMotors() {
-  drivingForwardNow = false;
-
   analogWrite(LEFT_FORWARD, 0);
   analogWrite(LEFT_BACKWARD, 0);
   analogWrite(RIGHT_FORWARD, 0);
@@ -266,9 +210,9 @@ void stopBrief() {
   delay(STOP_TIME);
 }
 
-void driveForwardBlock() {
-  drive(DRIVE_SPEED, DRIVE_SPEED);
-  delay(STEP_FORWARD_TIME);
+void driveStraightTimed(int ms) {
+  drive(LEFT_BASE_SPEED, RIGHT_BASE_SPEED);
+  delay(ms);
   stopBrief();
 }
 
@@ -283,24 +227,3 @@ void turnRight90() {
   delay(TURN_90_TIME);
   stopBrief();
 }
-
-Front: 29 cm | Left: 36 cm | RP: 7 | LP: 6
-Front: 29 cm | Left: 41 cm | RP: 13 | LP: 13
-Front: 250 cm | Left: 35 cm | RP: 20 | LP: 19
-Front: 34 cm | Left: 29 cm | RP: 27 | LP: 25
-Front: 33 cm | Left: 25 cm | RP: 33 | LP: 31
-Front: 21 cm | Left: 41 cm | RP: 40 | LP: 37
-Front: 41 cm | Left: 50 cm | RP: 46 | LP: 43
-Front: 38 cm | Left: 34 cm | RP: 53 | LP: 48
-Front: 55 cm | Left: 56 cm | RP: 59 | LP: 53
-Front: 35 cm | Left: 40 cm | RP: 65 | LP: 59
-Front: 250 cm | Left: 40 cm | RP: 72 | LP: 65
-Front: 34 cm | Left: 28 cm | RP: 79 | LP: 71
-Front: 29 cm | Left: 14 cm | RP: 85 | LP: 76
-Front: 20 cm | Left: 41 cm | RP: 91 | LP: 83
-Front: 250 cm | Left: 50 cm | RP: 97 | LP: 88
-Front: 35 cm | Left: 38 cm | RP: 103 | LP: 93
-Front: 52 cm | Left: 60 cm | RP: 109 | LP: 99
-Front: 39 cm | Left: 40 cm | RP: 115 | LP: 104
-Front: 250 cm | Left: 37 cm | RP: 121 | LP: 110
-Front: 34 cm | Left: 25 cm | RP: 128 | LP: 116
