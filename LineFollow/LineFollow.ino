@@ -10,7 +10,7 @@
 #define ULTRA_SONIC_TRIG 8
 #define ULTRA_SONIC_ECHO 7
 #define SERVO_OPEN 1700
-#define SERVO_CLOSED 1050
+#define SERVO_CLOSED 950
 #define GRIPPER 11
 #define NEO_PIXEL_PIN 12
 const int SENSOR_PINS[8] = {A0, A1, A2, A3, A4, A5, A6, A7};
@@ -76,17 +76,13 @@ void loop(){
   if(mostlyBlack()){
     checkForFinish();
   }
-  
-//  if(lastActiveSonic < millis()){
-//    if(ultraSonicSensor() < 15)
-//    {
-//      stopWheels(); 
-//      while(rightPulses < 20){
-//        analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
-//        analogWrite(LEFT_BACKWARD, WHEEL_SPEED);
-//      }
-//    }
-//  }
+
+  if(lastActiveSonic < millis()){
+//    Serial.println(ultraSonicSensor());
+    if(ultraSonicSensor() < 15){
+      avoidObstacle();
+    }
+  }
 }
 
 void calibrateBoundrys(){
@@ -104,7 +100,7 @@ void calibrateBoundrys(){
     readingCount++;
     Serial.println("---");
   }
-   
+  
   for(int i = 0; i < 8; i++){
     sensorBoundry[i] = temp[i] / readingCount;
     Serial.println(sensorBoundry[i]);
@@ -149,11 +145,11 @@ void drive(){
       break;
     case 2:
       writeWheels(1, 0.1);
-      setPixelsGreenToRed(0,0,0.7,0);
+      setPixelsGreenToRed(0,0,0.6,0);
       break;
     case 3:
       writeWheels(1, 0.3);
-      setPixelsGreenToRed(0,0,0.5,0);
+      setPixelsGreenToRed(0,0,0.3,0);
       break;
     case 4:
       writeWheels(1, 1);
@@ -161,11 +157,11 @@ void drive(){
       break;
     case 5:
       writeWheels(0.3, 1);
-      setPixelsGreenToRed(0,0,0,0.5);
+      setPixelsGreenToRed(0,0,0,0.3);
       break;
     case 6:
       writeWheels(0.1, 1);
-      setPixelsGreenToRed(0,0,0,0.7);
+      setPixelsGreenToRed(0,0,0,0.6);
       break;
     case 7:
     case 8:
@@ -235,25 +231,39 @@ void rightTurn(){
 }
 
 void checkForFinish(){
-  updateServo();
-  stopWheels();
-  while(leftPulses < 5){
-    analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
-    analogWrite(LEFT_FORWARD, WHEEL_SPEED);
-  }
-  stopWheels();
-  if(mostlyBlack()){
-    while(leftPulses < 15){
-      analogWrite(RIGHT_BACKWARD, WHEEL_SPEED);
-      analogWrite(LEFT_BACKWARD, WHEEL_SPEED);
-      clawOpen(true);
+  if(millis() > 30000){
+    updateServo();
+    stopWheels();
+    while(leftPulses < 5){
+      analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
+      analogWrite(LEFT_FORWARD, WHEEL_SPEED);
     }
     stopWheels();
-    setPixelsGreenToRed(1,1,1,1);
-    while(true){}
+    if(mostlyBlack()){
+      while(leftPulses < 25){
+        analogWrite(RIGHT_BACKWARD, WHEEL_SPEED);
+        analogWrite(LEFT_BACKWARD, WHEEL_SPEED);
+        if (leftPulses > 5){
+          clawOpen(true);
+        }
+      }
+      stopWheels();
+      setPixelsGreenToRed(1,1,1,1);
+      while(true){
+        updateServo();
+        setPixelsGreenToRed(1,0.5,0,0);  
+        delay(100);
+        setPixelsGreenToRed(0,1,0.5,0);  
+        delay(100);
+        setPixelsGreenToRed(0,0,1,0.5);  
+        delay(100);
+        setPixelsGreenToRed(0.5,0,0,1);  
+        delay(100);
+      }
+    }
+    stopWheels();
+    delay(50);
   }
-  stopWheels();
-  delay(50);
 }
 
 boolean mostlyBlack(){
@@ -308,4 +318,37 @@ void setPixelsGreenToRed(double colorZero, double colorOne, double colorTwo, dou
   pixels.setPixelColor(2, pixels.Color(255 - colorTwo * 255, colorTwo * 255, 0));
   pixels.setPixelColor(3, pixels.Color(255 - colorThree * 255, colorThree * 255, 0));
   pixels.show();
+}
+
+void avoidObstacle(){
+  stopWheels();
+  while(rightPulses < 7 && leftPulses < 7){
+    updateServo();
+    analogWrite(RIGHT_BACKWARD, WHEEL_SPEED);
+    analogWrite(LEFT_FORWARD, WHEEL_SPEED);
+  }
+  stopWheels();
+  delay(150);
+  while(rightPulses < 30 && leftPulses < 30){
+    updateServo();
+    analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
+    analogWrite(LEFT_FORWARD, WHEEL_SPEED);
+  }
+  stopWheels();
+  delay(150);
+  while(rightPulses < 13 && leftPulses < 13){
+    updateServo();
+    analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
+    analogWrite(LEFT_BACKWARD, WHEEL_SPEED);
+  }
+  stopWheels();
+  delay(150);
+  getReadings();
+  while(sensorReadings[4] && sensorReadings[5]){
+    getReadings();
+    updateServo();
+    analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
+    analogWrite(LEFT_FORWARD, WHEEL_SPEED);
+  }
+  stopWheels();
 }

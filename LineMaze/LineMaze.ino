@@ -62,7 +62,7 @@ void setup(){
   attachInterrupt(digitalPinToInterrupt(LEFT_IN), countPulseleftWheelISR, RISING);
 
   while(ultraSonicSensor() < 15){
-    
+//    wait until flag is removed
   }
 
   calibrateBoundrys();
@@ -72,7 +72,7 @@ void setup(){
 void loop(){
   getReadings();
   updateServo();
-  if(!sensorReadings[1] && (!sensorReadings[5] || !sensorReadings[4])){
+  if(!sensorReadings[0] && !sensorReadings[1] && (!sensorReadings[5] || !sensorReadings[4])){
     rightTurn();
   } else{
     drive(); 
@@ -148,31 +148,36 @@ void drive(){
       setPixelsGreenToRed(0,0,0,0.5);
       break;
     case 2:
-      writeWheels(1, 0.1);
+      writeWheels(1, 0);
       setPixelsGreenToRed(0,0,0,0.3);
       break;
     case 3:
-      writeWheels(1, 0.3);
+      writeWheels(1, 0.5);
       break;
     case 4:
       writeWheels(1, 1);
       break;
     case 5:
-      writeWheels(0.3, 1);
+      writeWheels(0.5, 1);
       break;
     case 6:
-      writeWheels(0.1, 1);
+      writeWheels(0, 1);
       setPixelsGreenToRed(0,0,0.3,0);
       break;
     case 7:
     case 8:
-      writeWheels(0, 1);
+      writeWheels(0, 0.8);
       setPixelsGreenToRed(0,0,0.5,0);
       break;
     case 0:
-      analogWrite(RIGHT_BACKWARD, WHEEL_SPEED * 0.8);
-      analogWrite(LEFT_BACKWARD, WHEEL_SPEED * 0.8);
+      stopWheels();
+      while(sensorReadings[7] && sensorReadings[6] && sensorReadings[5]){
+        analogWrite(RIGHT_BACKWARD, WHEEL_SPEED * 0.8);
+        analogWrite(LEFT_FORWARD, WHEEL_SPEED * 0.8);
+        getReadings();
+      }
       setPixelsGreenToRed(0,0,0,1);
+      stopWheels();
       break;
   }
 }
@@ -200,13 +205,11 @@ void getOnTrack(){
   while(rightPulses < 10 && leftPulses < 10){
     analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
     analogWrite(LEFT_FORWARD, WHEEL_SPEED);
-//    Serial.println(rightPulses);
   }
   stopWheels();
-  while(rightPulses < 15){
+  while(rightPulses < 20){
     clawOpen(false);
     analogWrite(LEFT_FORWARD, WHEEL_SPEED);
-//    Serial.println(rightPulses);
   }
   analogWrite(LEFT_FORWARD, 0);
 }
@@ -225,48 +228,59 @@ void rightTurn(){
   checkForFinish();
   Serial.print("turning Right");
   setPixelsGreenToRed(0,0,1,0);
-  while(leftPulses < 15){
+  stopWheels();
+  while(leftPulses < 12){
     analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
+    analogWrite(LEFT_BACKWARD, WHEEL_SPEED);
+    if(leftPulses > 4){
+      analogWrite(RIGHT_FORWARD, WHEEL_SPEED * 0.8);
+      analogWrite(LEFT_BACKWARD, WHEEL_SPEED * 0.8);
+    }
   }
   setPixelsGreenToRed(0,0,0,0);
   stopWheels();
+  getReadings();
 }
 
 void checkForFinish(){
+  updateServo();
   stopWheels();
-  while(leftPulses < 5){
+  while(leftPulses < 8){
     analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
     analogWrite(LEFT_FORWARD, WHEEL_SPEED);
+    if (leftPulses < 2){
+      analogWrite(RIGHT_FORWARD, WHEEL_SPEED * 0.8);
+      analogWrite(LEFT_FORWARD, WHEEL_SPEED * 0.8);
+    }
   }
   stopWheels();
-  delay(50);
   if(mostlyBlack()){
-    while(leftPulses < 15){
-      analogWrite(RIGHT_BACKWARD, 0);
-      analogWrite(LEFT_BACKWARD, 0);
-      clawOpen(true);
+    while (leftPulses < 25){
+      analogWrite(RIGHT_BACKWARD, WHEEL_SPEED);
+      analogWrite(LEFT_BACKWARD, WHEEL_SPEED);
+      if (leftPulses > 5){
+        clawOpen(true);
+      }
     }
     stopWheels();
     setPixelsGreenToRed(1,1,1,1);
-    while(true){}
-  }
-  while(leftPulses < 6){
-    analogWrite(RIGHT_BACKWARD, WHEEL_SPEED);
-    analogWrite(LEFT_FORWARD, WHEEL_SPEED);
+    while(true){
+      updateServo();  
+      delay(100);
+      setPixelsGreenToRed(0,0,1,0.7);  
+      delay(100);
+      setPixelsGreenToRed(0,0,0.7,1);  
+      delay(100);
+    }
   }
   stopWheels();
+  getReadings();
   delay(50);
 }
 
 boolean mostlyBlack(){
   getReadings();
-  int count = 0;
-  for(int reading : sensorReadings){
-    if(reading){
-      count++;
-    }
-  }
-  return (count < 6);
+  return (!sensorReadings[6] && !sensorReadings[2]);
 }
 
 int ultraSonicSensor(){
