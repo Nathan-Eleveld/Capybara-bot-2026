@@ -13,6 +13,7 @@
 #define SERVO_CLOSED 1000
 #define GRIPPER 11
 #define NEO_PIXEL_PIN 12
+
 const int SENSOR_PINS[8] = {A0, A1, A2, A3, A4, A5, A6, A7};
 int sensorBoundry[8] = {0,0,0,0,0,0,0,0};
 int sensorReadings[8];
@@ -28,6 +29,8 @@ int distance;
 unsigned long lastActiveSonic = 0;
 int servoPulseWidth = 1100;
 unsigned long lastServoPulse = 0;
+int detectCount = 0;
+bool waiting = true;
 
 #define DEBUG
 
@@ -61,9 +64,7 @@ void setup(){
   attachInterrupt(digitalPinToInterrupt(RIGHT_IN), countPulserightWheelISR, RISING);
   attachInterrupt(digitalPinToInterrupt(LEFT_IN), countPulseleftWheelISR, RISING);
 
-  while(ultraSonicSensor() < 15){
-//    wait until flag is removed
-  }
+  waitForRobotStart();
 
   calibrateBoundrys();
   getOnTrack();
@@ -85,6 +86,34 @@ void loop(){
         analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
         analogWrite(LEFT_BACKWARD, WHEEL_SPEED);
       }
+    }
+  }
+}
+
+bool isRobotDetected(){
+  detectCount = 0;
+
+  for(int count = 0; count < 3; count++){
+    int d = ultraSonicSensor();
+
+    if(distane > 0 && distance < 15){
+      detectCount++;
+    }
+
+    delay(50);
+  }
+
+  return detectCount >= 3;
+}
+
+void waitForRobotStart(){
+  stopWheels();
+  waiting = true;
+
+  while(waiting){
+    if(isRobotDetected()){
+      delay(3000);
+      waiting = false;
     }
   }
 }
@@ -140,7 +169,7 @@ void getReadings(){
 }
 
 void drive(){
-    stopWheels();
+  stopWheels();
   
   switch(getAverageSensorPin()){
     case 1:
@@ -187,7 +216,7 @@ int getAverageSensorPin(){
   int readingCount = 0;
   for(int i = 0; i < 8; i++){
     if(!sensorReadings[i]){
-      medianReading += i+ 1;
+      medianReading += i + 1;
       readingCount++;
     }
   }  
@@ -284,24 +313,24 @@ boolean mostlyBlack(){
 }
 
 int ultraSonicSensor(){
-    digitalWrite(ULTRA_SONIC_TRIG, LOW);
-    delayMicroseconds(2);
+  digitalWrite(ULTRA_SONIC_TRIG, LOW);
+  delayMicroseconds(2);
 
-    digitalWrite(ULTRA_SONIC_TRIG, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(ULTRA_SONIC_TRIG, LOW);
+  digitalWrite(ULTRA_SONIC_TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(ULTRA_SONIC_TRIG, LOW);
 
-    duration = pulseIn(ULTRA_SONIC_ECHO, HIGH);
+  duration = pulseIn(ULTRA_SONIC_ECHO, HIGH);
 
-    distance = duration * 0.034 / 2;
-    lastActiveSonic = millis() + 250;
-    
-    if (distance != 0)
-    {
-      return distance;
-    } else {
-      return ultraSonicSensor();
-    }
+  distance = duration * 0.034 / 2;
+  lastActiveSonic = millis() + 250;
+  
+  if (distance != 0)
+  {
+    return distance;
+  } else {
+    return ultraSonicSensor();
+  }
 }
 
 void clawOpen(bool open){
