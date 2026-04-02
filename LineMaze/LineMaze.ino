@@ -96,7 +96,7 @@ bool isRobotDetected(){
   for(int count = 0; count < 3; count++){
     int d = ultraSonicSensor();
 
-    if(distance > 0 && distance < 15){
+    if(distance > 0 && distance < 30){
       detectCount++;
     }
 
