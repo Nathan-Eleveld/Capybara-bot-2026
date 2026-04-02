@@ -112,11 +112,7 @@ void waitForRobotStart(){
 
   while(waiting){
     if(isRobotDetected()){
-      pixels.setPixelColor(0, pixels.Color(255, 120, 0));
-      pixels.setPixelColor(1, pixels.Color(255, 120, 0));
-      pixels.setPixelColor(2, pixels.Color(255, 120, 0));
-      pixels.setPixelColor(3, pixels.Color(255, 120, 0));
-      pixels.show();
+     setPixelsGreenToRed(0,0,0.6,0.6);
 
       delay(3000);
       waiting = false;
