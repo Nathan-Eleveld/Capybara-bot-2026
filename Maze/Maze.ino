@@ -12,29 +12,39 @@
 #define GRIPPER 11
 #define NEO_PIXEL_PIN 12
 #define WISH_LEFT 8
+
 const int SENSOR_PINS[8] = {A0, A1, A2, A3, A4, A5, A6, A7};
+
 int sensorBoundry[8] = {0,0,0,0,0,0,0,0};
 int sensorReadings[8];
+
 int rightPulses = 0;
 unsigned long lastInterruptRight = 0;
 int leftPulses = 0;
 unsigned long lastInterruptLeft = 0;
+
 unsigned long lastActiveSonicFront = 0;
 unsigned long lastActiveSonicLeft = 0;
+
 int distance;
 int distanceFront;
 int distanceLeft;
 long duration;
-int   winFrames;
+
+int winFrames;
 unsigned long lastActiveSonic;
+
 int servoPulseWidth = 1100;
 int servoOpen = 1500;
 int servoClosed = 1100; 
 unsigned long lastServoPulse = 0;
-bool  finished = false;
+
+bool finished = false;
+
+int detectCount = 0;
+bool waiting = true;
 
 void setup() {
-  // put your setup code here, to run once:
   Serial.begin(9600);
   Serial.println("Battlebot has Started");
 
@@ -66,7 +76,11 @@ void setup() {
   digitalWrite(GRIPPER, LOW);
 
   delay(500);
+
   calibrateBoundrys();
+
+  waitForRobotStart();
+
   getOnTrack();
   stopWheels();
 }
@@ -76,12 +90,12 @@ void loop() {
     getReadings(); 
 
     updateServo();
-    // put your main code here, to run repeatedly:
+
     distanceLeft = ultraSonicSensor(ULTRA_SONIC_TRIG_LEFT, ULTRA_SONIC_ECHO_LEFT);
     distanceFront = ultraSonicSensor(ULTRA_SONIC_TRIG_FRONT, ULTRA_SONIC_ECHO_FRONT);
-    //  Serial.println(distanceLeft);
-  
+
     stopWheels();
+
     if(distanceLeft + 1 < WISH_LEFT){
       writeWheels(1, 0.2);
     } else if(distanceLeft - 1 > WISH_LEFT){
@@ -89,33 +103,64 @@ void loop() {
     } else {
       writeWheels(1, 1);
     }
-  
+
     if(distanceFront < 10 && distanceLeft > 4){
       stopWheels();
       delay(100);
+
       while(distanceFront < 30){
         analogWrite(RIGHT_FORWARD, WHEEL_SPEED * 0.8);
         analogWrite(LEFT_BACKWARD, WHEEL_SPEED);
         distanceFront = ultraSonicSensor(ULTRA_SONIC_TRIG_FRONT, ULTRA_SONIC_ECHO_FRONT);
       }
+
       stopWheels(); 
+
       while(rightPulses < 4){
         analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
         analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
       }
+
       stopWheels();
       delay(100);
     }
 
     clawOpen(false);
+
   } else if(!finished) {
     finishingMove();
   }
-  
-  
 }
 
-//Function called when right wheel rotates 1/20th of a rotation
+bool isRobotDetected() {
+  detectCount = 0;
+
+  for (int count = 0; count < 3; i++) {
+    int distance = ultraSonicSensor(ULTRA_SONIC_TRIG_FRONT, ULTRA_SONIC_ECHO_FRONT);
+
+    if (distance > 0 && distance < 15) {
+      detectCount++;
+    }
+
+    delay(50);
+  }
+
+  return detectCount >= 3;
+}
+
+void waitForRobotStart() {
+  stopWheels();
+  waiting = true;
+
+  while (waiting) {
+    if (isRobotDetected()) {
+      delay(3000);
+      waiting = false;
+    }
+  }
+}
+
+// ISR RIGHT
 void countPulserightWheelISR(){
   if(millis() > lastInterruptRight){
     rightPulses++;
@@ -123,7 +168,7 @@ void countPulserightWheelISR(){
   }
 }
 
-//Function called when left wheel rotates 1/20th of a rotation
+// ISR LEFT
 void countPulseleftWheelISR(){
   if(millis() > lastInterruptLeft){
     leftPulses++;
@@ -149,24 +194,24 @@ void stopWheels(){
 }
 
 int ultraSonicSensor(int trig, int echo){
-    digitalWrite(trig, LOW);
-    delayMicroseconds(2);
+  digitalWrite(trig, LOW);
+  delayMicroseconds(2);
 
-    digitalWrite(trig, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(trig, LOW);
+  digitalWrite(trig, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trig, LOW);
 
-    duration = pulseIn(echo, HIGH);
+  duration = pulseIn(echo, HIGH);
 
-    lastActiveSonic = millis() + 250;
-    
-    distance = duration * 0.034 / 2;
-    
-    if (distance != 0){
-      return distance;
-    } else {
-      return ultraSonicSensor(trig, echo);
-    }
+  lastActiveSonic = millis() + 250;
+  
+  distance = duration * 0.034 / 2;
+  
+  if (distance != 0){
+    return distance;
+  } else {
+    return ultraSonicSensor(trig, echo);
+  }
 }
 
 void writeWheels(float multiplierRight, float multiplierLeft){
@@ -181,39 +226,42 @@ void writeWheelsBackwards(float multiplierRight, float multiplierLeft){
 
 void getOnTrack(){
   stopWheels();
+
   while(rightPulses < 10 && leftPulses < 10){
     analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
     analogWrite(LEFT_FORWARD, WHEEL_SPEED);
-//    Serial.println(rightPulses);
   }
+
   stopWheels();
+
   while(leftPulses < 20){
-     clawOpen(false);
+    clawOpen(false);
     analogWrite(LEFT_FORWARD, WHEEL_SPEED);
-//    Serial.println(rightPulses);
   }
+
   analogWrite(LEFT_FORWARD, 0);
 }
 
 void calibrateBoundrys(){
   int temp[8];
   int readingCount = 0;
+
   while(rightPulses < 10){
     analogWrite(RIGHT_FORWARD, WHEEL_SPEED);
     analogWrite(LEFT_FORWARD, WHEEL_SPEED);
+
     for(int i = 0; i < 8; i++){
       temp[i] = sensorBoundry[i] + analogRead(SENSOR_PINS[i]);
       sensorBoundry[i] = temp[i];
-//      Serial.println(sensorBoundry[i]);
     }
+
     readingCount++;
-//    Serial.println("---");
   }
    
   for(int i = 0; i < 8; i++){
     sensorBoundry[i] = temp[i] / readingCount;
-//    Serial.println(sensorBoundry[i]);
   }
+
   analogWrite(RIGHT_FORWARD, 0);
   analogWrite(LEFT_FORWARD, 0);
   delay(200);
@@ -221,18 +269,17 @@ void calibrateBoundrys(){
 
 bool winDetect(){
   int sensorsActive = 0;
+
   for(int reading : sensorReadings){
     sensorsActive += reading;
   }
+
   if(sensorsActive < 2){
     winFrames++;
   }else{
     winFrames = 0;
   }
-  #ifdef DEBUG
-    Serial.print(winFrames);
-    Serial.print(" --- ");
-  #endif
+
   if(winFrames > 20){
     return true;
   } else {
@@ -262,11 +309,13 @@ void clawOpen(bool open) {
 
 void finishingMove(){
   stopWheels();
-   while(rightPulses < 5 || leftPulses < 5){
+
+  while(rightPulses < 5 || leftPulses < 5){
     writeWheelsBackwards(1, 1);
     Serial.println(rightPulses);
     Serial.println(leftPulses);
   }
+
   stopWheels();
   clawOpen(true);
   finished = true;
